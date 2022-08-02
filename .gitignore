@@ -4,6 +4,7 @@
 *.pyc
 venv/
 build/
+logs/
 *.so
 *.pth
 *.pkl
