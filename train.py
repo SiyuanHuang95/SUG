@@ -49,7 +49,10 @@ weight_decay = 5e-4
 momentum = 0.9
 max_epoch = args.epochs
 num_class = 10
-dir_root = os.path.join(args.datadir, 'PointDA_data/')
+if 'data' not in args.datadir:
+    dir_root = os.path.join(args.datadir, 'PointDA_data/')
+else:
+    dir_root = args.datadir
 
 # print(dir_root)
 def main():
