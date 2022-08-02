@@ -1,10 +1,10 @@
 FROM pytorch/pytorch:1.8.0-cuda11.1-cudnn8-devel
 
-ENV PROJECT=/dg_point
+ENV PROJECT=/point_dg
 RUN mkdir -p $PROJECT
-RUN mkdir -p /dg_point/logs
+RUN mkdir -p /point_dg/logs
 
-ENV DATA=/dg_point/data
+ENV DATA=/point_dg/data
 RUN mkdir -p $DATA
 
 # Install project related dependencies

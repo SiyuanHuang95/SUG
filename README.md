@@ -26,6 +26,44 @@ The new version of PointDA dataset will come soon!
 - Python 3.6
 - PyTorch 1.0
 
+### Docker Environment
+1. Ensure that you have installed Docker, NVIDIA-Container toolkit
+2. Export data env variable, which will let the docker have the volume attach to the data folder.
+
+```
+    export DATA=/hdd1/huangsiyuan/PointDA_data/
+```
+3. To let the docker have the GPU access:
+```
+{
+    "runtimes": {
+        "nvidia": {
+            "path": "/usr/bin/nvidia-container-runtime",
+            "runtimeArgs": []
+        } 
+    },
+    "default-runtime": "nvidia" 
+}
+
+```
+4. build the docker:
+
+```
+make build
+```
+
+5. Finally, run the container with
+```
+make run
+```
+
+6. If you meet the problem:
+```
+ERROR: Couldn’t connect to Docker daemon at http+docker://localunixsocket - is it running?
+```
+- sudo gpasswd -a ${USER} docker
+- sudo su
+- su huangsiyuan
 
 ## File Structure
 ```
