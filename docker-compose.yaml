@@ -11,5 +11,5 @@ services:
     runtime: nvidia
     ipc: host
     volumes:
-      - ${PWD}/:/point_dg
+      - ${PWD}/:/point_dg/workspace
       - ${DATA}:/point_dg/data

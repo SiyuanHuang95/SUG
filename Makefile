@@ -10,8 +10,6 @@ test: check-env
 	@docker-compose run project nvidia-smi
 	@echo Pytorch CUDA setup installed?
 	@docker-compose run project python3 -c "import torch; print(torch.cuda.is_available())"
-	@echo MinkowskiEngine installed?
-	@docker-compose run project python3 -c "import MinkowskiEngine as ME; print(ME.__version__)"
 
 run: check-env
 	@docker-compose run project
