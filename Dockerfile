@@ -6,6 +6,7 @@ RUN mkdir -p  $PROJECT/logs && mkdir -p $PROJECT/workspace/ && mkdir $PROJECT/da
 
 # Copy the repo file to docker
 COPY . $PROJECT/workspace
+RUN pip install -r requirements.txt
 
 # RUN python3 -m pip install --editable .
 # Complie the project environment if needed
