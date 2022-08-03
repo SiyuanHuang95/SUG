@@ -1,23 +1,9 @@
 # 3D Transfer Learning - PointDAN
 
-This repo contains the source code and dataset for our NeurIPS 2019 paper:
+## TODO List
 
-[**PointDAN: A Multi-Scale 3D Domain Adaption Network for Point Cloud Representation**](http://papers.nips.cc/paper/8940-pointdan-a-multi-scale-3d-domain-adaption-network-for-point-cloud-representation)
-<br>
-2019 Conference on Neural Information Processing Systems (NeurIPS 2019)
-<br>
-[paper](http://papers.nips.cc/paper/8940-pointdan-a-multi-scale-3d-domain-adaption-network-for-point-cloud-representation),
-[arXiv](https://arxiv.org/abs/1911.02744),
-[bibtex](http://papers.nips.cc/paper/8940-pointdan-a-multi-scale-3d-domain-adaption-network-for-point-cloud-representation/bibtex)
-
-![PointDAN](/Figs/PointDAN.png)
-
-
-## Dataset
-![PointDA-10](/Figs/PointDA-10.png)
-The [PointDA-10](https://drive.google.com/file/d/1-LfJWL5geF9h0Z2QpdTL0n4lShy8wy2J/view?usp=sharing) dataset is extracted from three popular 3D object/scene datasets (i.e., [ModelNet](https://modelnet.cs.princeton.edu/), [ShapeNet](https://shapenet.cs.stanford.edu/iccv17/) and [ScanNet](http://www.scan-net.org/)) for cross-domain 3D objects classification.
-
-The new version of PointDA dataset will come soon!
+[ ] Split one dataset to different domains, and fake it as the Source_s and Target_s
+[ ] Give the acc report on the another dataset
 
 ## Requirements
 - Python 3.6
