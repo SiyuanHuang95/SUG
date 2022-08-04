@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader
 from model.model_pointnet import Pointnet_cls as Pointnet_cls
 import model.Model as mM
 from data.dataloader import Modelnet40_data, Shapenet_data, Scannet_data_h5
+from data.dataloader import create_splitted_dataset
 from torch.autograd import Variable
 import time
 import numpy as np
@@ -64,8 +65,12 @@ def main():
 
     data_func={'modelnet': Modelnet40_data, 'scannet': Scannet_data_h5, 'shapenet': Shapenet_data}
 
-    source_train_dataset = data_func[args.source](pc_input_num=1024, status='train', aug=True, pc_root = dir_root + args.source)
-    target_train_dataset1 = data_func[args.target](pc_input_num=1024, status='train', aug=True,  pc_root = dir_root + args.target)
+    # source_train_dataset = data_func[args.source](pc_input_num=1024, status='train', aug=True, pc_root = dir_root + args.source)
+    # target_train_dataset1 = data_func[args.target](pc_input_num=1024, status='train', aug=True,  pc_root = dir_root + args.target)
+    source_train_subsets = create_splitted_dataset(dataset_type=args.source, status="train")
+    source_train_dataset = source_train_subsets[0]
+    target_train_dataset1 = source_train_subsets[1]
+
     source_test_dataset = data_func[args.source](pc_input_num=1024, status='test', aug=False, pc_root= \
         dir_root + args.source)
     target_test_dataset1 = data_func[args.target](pc_input_num=1024, status='test', aug=False, pc_root= \

@@ -7,10 +7,11 @@ import numpy as np
 import glob
 import random
 from data.data_utils import *
+from utils.train_files_spliter import split_dataset
 
 
 def load_dir(data_dir, name='train_files.txt'):
-    with open(os.path.join(data_dir,name),'r') as f:
+    with open(os.path.join(data_dir, name), 'r') as f:
         lines = f.readlines()
     return [os.path.join(data_dir, line.rstrip().split('/')[-1]) for line in lines]
 
@@ -19,7 +20,8 @@ def get_info(shapes_dir, isView=False):
     names_dict = {}
     if isView:
         for shape_dir in shapes_dir:
-            name = '_'.join(os.path.split(shape_dir)[1].split('.')[0].split('_')[:-1])
+            name = '_'.join(os.path.split(shape_dir)[
+                            1].split('.')[0].split('_')[:-1])
             if name in names_dict:
                 names_dict[name].append(shape_dir)
             else:
@@ -75,7 +77,7 @@ class Modelnet40_data(data.Dataset):
 
 
 class Shapenet_data(data.Dataset):
-    def __init__(self, pc_root, status='train', pc_input_num=1024, aug=True, data_type='*.npy'):
+    def __init__(self, pc_root, status='train', pc_input_num=1024, aug=True, data_type='*.npy', pts_list=None):
         super(Shapenet_data, self).__init__()
 
         self.status = status
@@ -91,11 +93,14 @@ class Shapenet_data(data.Dataset):
         categorys = sorted(categorys)
 
         if status == 'train':
-            pts_list = glob.glob(os.path.join(pc_root, '*', 'train', self.data_type))
+            pts_list = glob.glob(os.path.join(
+                pc_root, '*', 'train', self.data_type))
         elif status == 'test':
-            pts_list = glob.glob(os.path.join(pc_root, '*', 'test', self.data_type))
+            pts_list = glob.glob(os.path.join(
+                pc_root, '*', 'test', self.data_type))
         else:
-            pts_list = glob.glob(os.path.join(pc_root, '*', 'validation', self.data_type))
+            pts_list = glob.glob(os.path.join(
+                pc_root, '*', 'validation', self.data_type))
         # names_dict = get_info(pts_list, isView=False)
 
         for _dir in pts_list:
@@ -110,18 +115,21 @@ class Shapenet_data(data.Dataset):
             pc = np.array([[float(value) for value in xyz.split(' ')]
                            for xyz in open(self.pc_list[idx], 'r') if len(xyz.split(' ')) == 3])[:self.pc_input_num, :]
         elif self.data_type == '*.npy':
-            pc = np.load(self.pc_list[idx])[:self.pc_input_num].astype(np.float32)
+            pc = np.load(self.pc_list[idx])[
+                :self.pc_input_num].astype(np.float32)
         pc = normal_pc(pc)
         if self.aug:
             pc = rotation_point_cloud(pc)
             pc = jitter_point_cloud(pc)
-        pad_pc = np.zeros(shape=(self.pc_input_num-pc.shape[0], 3), dtype=float)
+        pad_pc = np.zeros(
+            shape=(self.pc_input_num-pc.shape[0], 3), dtype=float)
         pc = np.concatenate((pc, pad_pc), axis=0)
         pc = np.expand_dims(pc.transpose(), axis=2)
         return torch.from_numpy(pc).type(torch.FloatTensor), lbl
 
     def __len__(self):
         return len(self.pc_list)
+
 
 class Scannet_data_h5(data.Dataset):
 
@@ -143,11 +151,11 @@ class Scannet_data_h5(data.Dataset):
             data_file = h5py.File(pth, 'r')
             point = data_file['data'][:]
             label = data_file['label'][:]
-            
+
             # idx = [index for index, value in enumerate(list(label)) if value in self.label_map]
             # point_new = point[idx]
             # label_new = np.array([self.label_map.index(value) for value in label[idx]])
-            
+
             point_list.append(point)
             label_list.append(label)
         self.data = np.concatenate(point_list, axis=0)
@@ -166,20 +174,65 @@ class Scannet_data_h5(data.Dataset):
         # print(pc.shape)
         pc = np.expand_dims(pc.transpose(), axis=2)
         return torch.from_numpy(pc).type(torch.FloatTensor), label
+
     def __len__(self):
         return self.data.shape[0]
 
 
+class UnifiedPointDG(data.Dataset):
+    def __init__(self, dataset_type,  pts, labels, status='train', pc_input_num=1024, aug=True):
+        super(UnifiedPointDG, self).__init__()
+
+        self.num_points = pc_input_num
+        self.status = status
+        self.aug = aug
+        self.dataset_type = dataset_type
+
+        self.pts = pts
+        self.labels = labels
+
+        print(f"Create Dataset {dataset_type} with pts {pts.shape[0]}")
+
+    def __getitem__(self, index):
+        raw_pts = self.pts[index]
+        label = self.labels[index]
+        pts = normal_pc(raw_pts)
+
+        if self.aug:
+            pts = rotation_point_cloud(pts)
+            pts = jitter_point_cloud(pts)
+
+        if pts.shape[0] < self.num_points:
+            pad_pc = np.zeros(
+                shape=(self.num_points - pts.shape[0], 3), dtype=float)
+            pts = np.concatenate((pts, pad_pc), axis=0)
+        elif pts.shape[0] > self.num_points:
+            point_idx = np.arange(0, pts.shape[0])
+            np.random.shuffle(point_idx)
+            pts = pts[point_idx[:self.num_points]]
+        pts = np.expand_dims(pts.transpose(), axis=2)
+        return torch.from_numpy(pts).type(torch.FloatTensor), label
+
+    def __len__(self):
+        return self.pts.shape[0]
+
+
+def create_splitted_dataset(dataset_type, status="train", config=None):
+    dataset_list = ["scannet", "shapenet", "modelnet"]
+    assert dataset_type in dataset_list, f"Not supported dataset {dataset_type}!"
+
+    dataset_spliter = split_dataset(
+        dataset_type, status=status, split_config=config)
+
+    dataset_subsets = []
+    for subset in dataset_spliter.keys():
+        pts = dataset_spliter[subset]["pts"]
+        label = dataset_spliter[subset]["label"]
+        dataset_subsets.append(UnifiedPointDG(
+            dataset_type=dataset_type, pts=pts, labels=label, status=status))
+
+    return dataset_subsets
+
+
 if __name__ == "__main__":
-    # data = Modelnet40_data(num_points=1024,train=False)
-    data = Shapenet_data(pc_root='/home/youhaoxuan/data/Modelnet_Shapenet/shapenet', status='validate')
-    # data = Modelnet40_data(pc_root='/home/youhaoxuan/data/Modelnet_Shapenet/modelnet40', status='train')
-    print (len(data))
-    point, label = data[0]
-    print (point.shape, label)
-    
-
-
-
-
-
+    pass
