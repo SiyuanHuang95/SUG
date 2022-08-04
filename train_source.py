@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from model_pointnet import Pointnet_cls
-from dataloader import Modelnet40_data, Shapenet_data, Scannet_data_h5
+from model.model_pointnet import Pointnet_cls as Pointnet_cls
+from data.dataloader import Modelnet40_data, Shapenet_data, Scannet_data_h5
 import time
 import os
 import argparse
