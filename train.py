@@ -3,16 +3,16 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from model_pointnet import Pointnet_cls
-import Model
-from dataloader import Modelnet40_data, Shapenet_data, Scannet_data_h5
+from model.model_pointnet import Pointnet_cls as Pointnet_cls
+import model.Model as mM
+from data.dataloader import Modelnet40_data, Shapenet_data, Scannet_data_h5
 from torch.autograd import Variable
 import time
 import numpy as np
 import os
 import argparse
 import pdb
-import mmd
+import model.mmd as mmd
 # from utils import *
 import math
 import warnings
@@ -86,7 +86,7 @@ def main():
 
     # Model
 
-    model = Model.Net_MDA()
+    model = mM.Net_MDA()
     model = model.to(device=device)
 
     criterion = nn.CrossEntropyLoss()

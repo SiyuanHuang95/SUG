@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-import point_utils
+import model.point_utils as point_utils
 
 
 class conv_2d(nn.Module):

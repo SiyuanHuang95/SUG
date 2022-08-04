@@ -1,4 +1,4 @@
-from model_utils import *
+from model.model_utils import *
 import pdb
 import os
 import torch.nn.functional as F

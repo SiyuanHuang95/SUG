@@ -6,7 +6,7 @@ import h5py
 import numpy as np
 import glob
 import random
-from data_utils import *
+from data.data_utils import *
 
 
 def load_dir(data_dir, name='train_files.txt'):
