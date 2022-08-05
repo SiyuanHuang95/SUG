@@ -8,7 +8,7 @@ def eval_worker(eval_dict):
     device = eval_dict["device"]
     criterion = eval_dict["criterion"]
     epoch = eval_dict["epoch"]
-
+    print(f"Current eval on: {dataset}")
     loss_total = 0
     correct_total = 0
     data_total = 0

@@ -4,6 +4,7 @@ import h5py
 import glob
 import numpy as np
 import pickle
+import datetime
 data_root = "/point_dg/data"
 
 
@@ -17,19 +18,19 @@ def split_dataset(dataset_type, split_config=None, status='train'):
 
     dataset_path = os.path.join(data_root, dataset_type)
     full_pts, full_label = include_dataset_full_information(
-        dataset_path, status=status)
+        dataset_type, status=status)
     assert full_pts.shape[0] == full_label.shape[0], "The label size should be identical with pts"
 
     dataset_spliter = {}
     index_subset_1, index_subset_2 = None, None
-    index_config_naming = split_config["split_method"] + "_" + str(split_config["sample_rate"]) + ".pkl"
+    index_config_naming = str(datetime.datetime.now()) + split_config["split_method"] + "_" + str(split_config["sample_rate"]) + ".pkl"
     index_file_storage = os.path.join(dataset_path, index_config_naming)
     if os.path.exists(index_file_storage):
+        print(f"Direct load the indexing history from {index_file_storage}")
         with open(index_file_storage, "rb") as f:
-            indexs = np.load(index_file_storage)
+            indexs = pickle.load(f)
             index_subset_1 = indexs['index1']
             index_subset_2 = indexs['index2']
-        print(f"Direct load the indexing history from {index_file_storage}")
 
     if index_subset_1 is None:
         if split_config["split_method"] == "random":
@@ -66,14 +67,14 @@ def split_dataset(dataset_type, split_config=None, status='train'):
     return dataset_spliter
 
 
-def include_dataset_full_information(dataset_path, status='train'):
+def include_dataset_full_information(dataset_type, status='train'):
     """
         Load full train information for one dataset.
     """
-    pts_path = os.path.join(dataset_path, status+"_pts.npy")
+    pts_path = os.path.join(data_root,  dataset_type, status+"_pts.npy")
     full_pts = np.load(pts_path)
 
-    label_path = os.path.join(dataset_path, status+"_label.npy")
+    label_path = os.path.join(data_root, dataset_type, status+"_label.npy")
     full_label = np.load(label_path)
 
     return full_pts, full_label

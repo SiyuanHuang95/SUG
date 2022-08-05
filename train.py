@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 from model.model_pointnet import Pointnet_cls as Pointnet_cls
 import model.Model as mM
 from data.dataloader import Modelnet40_data, Shapenet_data, Scannet_data_h5
-from data.dataloader import create_splitted_dataset
+from data.dataloader import create_splitted_dataset, create_single_dataset
 from torch.autograd import Variable
 import time
 import numpy as np
@@ -77,12 +77,9 @@ def main():
     source_train_dataset = source_train_subsets[0]
     target_train_dataset1 = source_train_subsets[1]
 
-    source_test_dataset = data_func[args.source](pc_input_num=1024, status='test', aug=False, pc_root= \
-        dir_root + args.source)
-    target_test_dataset1 = data_func[test_datasets[0]](pc_input_num=1024, status='test', aug=False, pc_root= \
-        dir_root + test_datasets[0])
-    target_test_dataset2 = data_func[test_datasets[-1]](pc_input_num=1024, status='test', aug=False, pc_root= \
-        dir_root + test_datasets[-1])
+    source_test_dataset = create_single_dataset(args.source, status="test", aug=False)
+    target_test_dataset1 = create_single_dataset(test_datasets[0], status="test", aug=False)
+    target_test_dataset2 = create_single_dataset(test_datasets[-1], status="test", aug=False)
 
     num_source_train = len(source_train_dataset)
     num_source_test = len(source_test_dataset)

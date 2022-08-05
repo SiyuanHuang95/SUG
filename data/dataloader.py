@@ -7,7 +7,7 @@ import numpy as np
 import glob
 import random
 from data.data_utils import *
-from utils.train_files_spliter import split_dataset
+from utils.train_files_spliter import split_dataset, include_dataset_full_information
 
 
 def load_dir(data_dir, name='train_files.txt'):
@@ -191,7 +191,7 @@ class UnifiedPointDG(data.Dataset):
         self.pts = pts
         self.labels = labels
 
-        print(f"Create Dataset {dataset_type} with pts {pts.shape[0]}")
+        print(f"Create {status} Dataset {dataset_type} with pts {pts.shape[0]}")
 
     def __getitem__(self, index):
         raw_pts = self.pts[index]
@@ -233,6 +233,15 @@ def create_splitted_dataset(dataset_type, status="train", config=None):
 
     return dataset_subsets
 
+
+def create_single_dataset(dataset_type, status="train", aug=False):
+    dataset_list = ["scannet", "shapenet", "modelnet"]
+    assert dataset_type in dataset_list, f"Not supported dataset {dataset_type}!"
+
+    pts, labels = include_dataset_full_information(dataset_type, status)
+    assert len(set(labels.tolist())) == 10, "The class in labels is less than 10!"
+    return UnifiedPointDG(dataset_type=dataset_type, pts=pts, labels=labels, status=status, aug=aug)
+    
 
 if __name__ == "__main__":
     pass
