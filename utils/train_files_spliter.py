@@ -6,11 +6,8 @@ import numpy as np
 import pickle
 import datetime
 
-# data_root = "/point_dg/data"
-# =======
-
-# data_root = "/point_dg/data"
-data_root = "/data/point_cloud_classification/PointDA_data"
+data_root = "/point_dg/data"
+# data_root = "/data/point_cloud_classification/PointDA_data"
 
 
 def split_dataset(dataset_type, split_config=None, status='train'):

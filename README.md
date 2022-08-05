@@ -3,9 +3,11 @@
 ## TODO List
 
 [X] Split one dataset to different domains, and fake it as the Source_s and Target_s
-    [ ] random split -> should save the random index to reproduce the experiment
-    
+    [X] random split -> should save the random index to reproduce the experiment
 [X] Give the acc report on the another dataset
+[ ] Set the data path with config
+[ ] Add config parse
+[ ] should bind the volume of logs/ with local host 
 
 ## Requirements
 - Python 3.6
