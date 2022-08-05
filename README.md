@@ -2,9 +2,10 @@
 
 ## TODO List
 
-[ ] Split one dataset to different domains, and fake it as the Source_s and Target_s
-
-[ ] Give the acc report on the another dataset
+[X] Split one dataset to different domains, and fake it as the Source_s and Target_s
+    [ ] random split -> should save the random index to reproduce the experiment
+    
+[X] Give the acc report on the another dataset
 
 ## Requirements
 - Python 3.6

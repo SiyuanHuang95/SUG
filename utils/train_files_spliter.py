@@ -3,7 +3,7 @@ from tkinter import N
 import h5py
 import glob
 import numpy as np
-
+import pickle
 data_root = "/point_dg/data"
 
 
@@ -11,7 +11,8 @@ def split_dataset(dataset_type, split_config=None, status='train'):
     if split_config is None:
         split_config = {
             "split_method" : "random",
-            "subset_2_fullsize": True
+            "subset_2_fullsize": True,
+            "sample_rate": 0.5
         }
 
     dataset_path = os.path.join(data_root, dataset_type)
@@ -20,30 +21,48 @@ def split_dataset(dataset_type, split_config=None, status='train'):
     assert full_pts.shape[0] == full_label.shape[0], "The label size should be identical with pts"
 
     dataset_spliter = {}
-    if split_config["split_method"] == "random":
-        dataset_size = full_pts.shape[0]
-        index_array = np.arange(dataset_size)
+    index_subset_1, index_subset_2 = None, None
+    index_config_naming = split_config["split_method"] + "_" + str(split_config["sample_rate"]) + ".pkl"
+    index_file_storage = os.path.join(dataset_path, index_config_naming)
+    if os.path.exists(index_file_storage):
+        with open(index_file_storage, "rb") as f:
+            indexs = np.load(index_file_storage)
+            index_subset_1 = indexs['index1']
+            index_subset_2 = indexs['index2']
+        print(f"Direct load the indexing history from {index_file_storage}")
 
-        subset_size = dataset_size // 2
-        index_subset_1 = np.random.choice(
-            index_array, replace=False, size=subset_size)
+    if index_subset_1 is None:
+        if split_config["split_method"] == "random":
+            dataset_size = full_pts.shape[0]
+            index_array = np.arange(dataset_size)
+            
+            subset_size = int(dataset_size * split_config["sample_rate"]) 
+            index_subset_1 = np.random.choice(
+                index_array, replace=False, size=subset_size)
+            
+            if not split_config["subset_2_fullsize"]:
+                index_subset_2 = np.setdiff1d(index_array, index_subset_1)
+            else:
+                index_subset_2 = index_array
+            
+            indexs = {'index2':index_subset_2, "index1": index_subset_1}
         
-        if not split_config["subset_2_fullsize"]:
-            index_subset_2 = np.setdiff1d(index_array, index_subset_1)
-        else:
-            index_subset_2 = index_array
+        with open(index_file_storage, "wb") as f:
+            pickle.dump(indexs, f)
+        print(f"Save indexing history to {index_file_storage}")
+        
+    dataset_spliter = {
+        "subset_1": {
+            "pts": full_pts[index_subset_1, :],
+            "label": full_label[index_subset_1]
+        },
 
-        dataset_spliter = {
-            "subset_1": {
-                "pts": full_pts[index_subset_1, :],
-                "label": full_label[index_subset_1]
-            },
-
-            "subset_2": {
-                "pts": full_pts[index_subset_2, :],
-                "label": full_label[index_subset_2]
-            }
+        "subset_2": {
+            "pts": full_pts[index_subset_2, :],
+            "label": full_label[index_subset_2]
         }
+    }
+
     return dataset_spliter
 
 

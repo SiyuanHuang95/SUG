@@ -7,6 +7,7 @@ from data.dataloader import Modelnet40_data, Shapenet_data, Scannet_data_h5
 import time
 import os
 import argparse
+from tensorboardX import SummaryWriter
 
 # Command setting
 parser = argparse.ArgumentParser(description='Main')
@@ -22,7 +23,6 @@ parser.add_argument('-tb_log_dir', type=str, help='directory of tb', default='./
 args = parser.parse_args()
 
 if not os.path.exists(os.path.join(os.getcwd(), args.tb_log_dir)):
-    from tensorboardX import SummaryWriter
     os.makedirs(os.path.join(os.getcwd(), args.tb_log_dir))
 writer = SummaryWriter(log_dir=args.tb_log_dir)
 
@@ -35,7 +35,10 @@ weight_decay = 5e-4
 momentum = 0.9
 max_epoch = args.epochs
 num_class = 10
-dir_root = os.path.join(args.datadir, 'PointDA_data/')
+if 'data' not in args.datadir:
+    dir_root = os.path.join(args.datadir, 'PointDA_data/')
+else:
+    dir_root = args.datadir
 
 
 def main():
