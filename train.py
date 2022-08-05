@@ -33,10 +33,10 @@ parser.add_argument('-batchsize', '-b', type=int, help='batch size', default=64)
 parser.add_argument('-gpu', '-g', type=str, help='cuda id', default='0')
 parser.add_argument('-epochs', '-e', type=int, help='training epoch', default=200)
 parser.add_argument('-models', '-m', type=str, help='alignment model', default='MDA')
-parser.add_argument('-lr',type=float, help='learning rate', default=0.0001)
-parser.add_argument('-scaler',type=float, help='scaler of learning rate', default=1.)
-parser.add_argument('-weight',type=float, help='weight of src loss', default=1.)
-parser.add_argument('-datadir',type=str, help='directory of data', default='./dataset/')
+parser.add_argument('-lr', type=float, help='learning rate', default=0.0001)
+parser.add_argument('-scaler', type=float, help='scaler of learning rate', default=1.)
+parser.add_argument('-weight', type=float, help='weight of src loss', default=1.)
+parser.add_argument('-datadir', type=str, help='directory of data', default='./dataset/')
 parser.add_argument('-tb_log_dir', type=str, help='directory of tb', default='./logs')
 args = parser.parse_args()
 
@@ -58,18 +58,19 @@ if 'data' not in args.datadir:
 else:
     dir_root = args.datadir
 
+
 # print(dir_root)
 def main():
-    print ('Start Training\nInitiliazing\n')
+    print('Start Training\nInitiliazing\n')
     print('The source domain is set to:', args.source)
 
     dataset_list = ["scannet", "shapenet", "modelnet"]
     test_datasets = list(set(dataset_list) - set([args.source]))
-    print('The datasets used for testing:', test_datasets) 
+    print('The datasets used for testing:', test_datasets)
 
     # Data loading
 
-    data_func={'modelnet': Modelnet40_data, 'scannet': Scannet_data_h5, 'shapenet': Shapenet_data}
+    data_func = {'modelnet': Modelnet40_data, 'scannet': Scannet_data_h5, 'shapenet': Shapenet_data}
 
     # source_train_dataset = data_func[args.source](pc_input_num=1024, status='train', aug=True, pc_root = dir_root + args.source)
     # target_train_dataset1 = data_func[args.target](pc_input_num=1024, status='train', aug=True,  pc_root = dir_root + args.target)
@@ -87,23 +88,29 @@ def main():
     num_target_test1 = len(target_test_dataset1)
     num_target_test2 = len(target_test_dataset2)
 
-    source_train_dataloader = DataLoader(source_train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2, drop_last=True)
-    target_train_dataloader1 = DataLoader(target_train_dataset1, batch_size=BATCH_SIZE, shuffle=True, num_workers=2, drop_last=True)
-    
+    source_train_dataloader = DataLoader(source_train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
+                                         drop_last=True)
+    target_train_dataloader1 = DataLoader(target_train_dataset1, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
+                                          drop_last=True)
+
     # should also check the source test performance to avoid the de-grade
-    source_test_dataloader = DataLoader(source_test_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2, drop_last=True)
-    target_test_dataloader1 = DataLoader(target_test_dataset1, batch_size=BATCH_SIZE, shuffle=True, num_workers=2, drop_last=True)
-    target_test_dataloader2 = DataLoader(target_test_dataset2, batch_size=BATCH_SIZE, shuffle=True, num_workers=2, drop_last=True)
-    performance_test_sets = {"source": source_test_dataloader, "test1": target_test_dataloader1, "test2": target_test_dataloader2}
+    source_test_dataloader = DataLoader(source_test_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
+                                        drop_last=True)
+    target_test_dataloader1 = DataLoader(target_test_dataset1, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
+                                         drop_last=True)
+    target_test_dataloader2 = DataLoader(target_test_dataset2, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
+                                         drop_last=True)
+    performance_test_sets = {"source": source_test_dataloader, "test1": target_test_dataloader1,
+                             "test2": target_test_dataloader2}
 
     print(f"Num of source train: {num_source_train}, Num of target train: {num_target_train1}")
-    print(f"Num of source test: {num_source_test}, Num of test on {test_datasets[0]} {num_target_test1}, on {test_datasets[-1]} {num_target_test2}")
+    print(
+        f"Num of source test: {num_source_test}, Num of test on {test_datasets[0]} {num_target_test1}, on {test_datasets[-1]} {num_target_test2}")
     print('batch_size:', BATCH_SIZE)
 
     best_test_acc = {"source": 0, "test1": 0, "test2": 0}
     # pool_eval = Pool(processes=len(dataset_list))
     # AssertionError: daemonic processes are not allowed to have children
-
 
     # Model
     model = mM.Net_MDA()
@@ -112,23 +119,23 @@ def main():
     criterion = nn.CrossEntropyLoss()
     criterion = criterion.to(device=device)
 
-    remain_epoch=50
+    remain_epoch = 50
 
     # Optimizer
 
-    params = [{'params':v} for k,v in model.g.named_parameters() if 'pred_offset' not in k]
+    params = [{'params': v} for k, v in model.g.named_parameters() if 'pred_offset' not in k]
 
     optimizer_g = optim.Adam(params, lr=LR, weight_decay=weight_decay)
-    lr_schedule_g = optim.lr_scheduler.CosineAnnealingLR(optimizer_g, T_max=args.epochs+remain_epoch)
+    lr_schedule_g = optim.lr_scheduler.CosineAnnealingLR(optimizer_g, T_max=args.epochs + remain_epoch)
 
-    optimizer_c = optim.Adam([{'params':model.c1.parameters()},{'params':model.c2.parameters()}], lr=LR*2,
+    optimizer_c = optim.Adam([{'params': model.c1.parameters()}, {'params': model.c2.parameters()}], lr=LR * 2,
                              weight_decay=weight_decay)
-    lr_schedule_c = optim.lr_scheduler.CosineAnnealingLR(optimizer_c, T_max=args.epochs+remain_epoch)
+    lr_schedule_c = optim.lr_scheduler.CosineAnnealingLR(optimizer_c, T_max=args.epochs + remain_epoch)
 
-    optimizer_dis = optim.Adam([{'params':model.g.parameters()},{'params':model.attention_s.parameters()},{'params':model.attention_t.parameters()}], 
-        lr=LR*args.scaler, weight_decay=weight_decay)
-    lr_schedule_dis = optim.lr_scheduler.CosineAnnealingLR(optimizer_dis, T_max=args.epochs+remain_epoch)
-
+    optimizer_dis = optim.Adam([{'params': model.g.parameters()}, {'params': model.attention_s.parameters()},
+                                {'params': model.attention_t.parameters()}],
+                               lr=LR * args.scaler, weight_decay=weight_decay)
+    lr_schedule_dis = optim.lr_scheduler.CosineAnnealingLR(optimizer_dis, T_max=args.epochs + remain_epoch)
 
     def adjust_learning_rate(optimizer, epoch):
         """Sets the learning rate to the initial LR decayed by half by every 5 or 10 epochs"""
@@ -154,7 +161,7 @@ def main():
 
     for epoch in range(max_epoch):
         since_e = time.time()
-            
+
         lr_schedule_g.step(epoch=epoch)
         lr_schedule_c.step(epoch=epoch)
         adjust_learning_rate(optimizer_dis, epoch)
@@ -170,7 +177,7 @@ def main():
         correct_total = 0
         data_total = 0
         data_t_total = 0
-        cons = math.sin((epoch + 1)/max_epoch * math.pi/2 )
+        cons = math.sin((epoch + 1) / max_epoch * math.pi / 2)
 
         # Training
 
@@ -184,8 +191,8 @@ def main():
             data_t = data_t.to(device=device)
             label_t = label_t.to(device=device).long()
 
-            pred_s1,pred_s2 = model(data)
-            pred_t1,pred_t2 = model(data_t, constant = cons, adaptation=True)
+            pred_s1, pred_s2 = model(data)
+            pred_t1, pred_t2 = model(data_t, constant=cons, adaptation=True)
 
             # Classification loss
 
@@ -194,9 +201,9 @@ def main():
 
             # Adversarial loss
 
-            loss_adv = - 1 * discrepancy(pred_t1, pred_t2) 
+            loss_adv = - 1 * discrepancy(pred_t1, pred_t2)
 
-            loss_s = loss_s1  +  loss_s2
+            loss_s = loss_s1 + loss_s2
             loss = args.weight * loss_s + loss_adv
 
             loss.backward()
@@ -205,9 +212,8 @@ def main():
             optimizer_g.zero_grad()
             optimizer_c.zero_grad()
 
-
             # Local Alignment
-            
+
             feat_node_s = model(data, node_adaptation_s=True)
             feat_node_t = model(data_t, node_adaptation_t=True)
             sigma_list = [0.01, 0.1, 1, 10, 100]
@@ -220,15 +226,17 @@ def main():
 
             loss_total += loss_s.item() * data.size(0)
             loss_adv_total += loss_adv.item() * data.size(0)
-            loss_node_total +=  loss_node_adv.item() * data.size(0)
+            loss_node_total += loss_node_adv.item() * data.size(0)
             data_total += data.size(0)
             data_t_total += data_t.size(0)
 
             if (batch_idx + 1) % 10 == 0:
-                print('Train:{} [{} {}/{}  loss_s: {:.4f} \t loss_adv: {:.4f} \t loss_node_adv: {:.4f} \t cons: {:.4f}]'.format(
-                epoch, data_total, data_t_total,num_source_train, loss_total/data_total, 
-                loss_adv_total/data_total,  loss_node_total/data_total,  cons
-                ))
+                print(
+                    'Train:{} [{} {}/{}  loss_s: {:.4f} \t loss_adv: {:.4f} \t loss_node_adv: {:.4f} \t cons: {:.4f}]'.format(
+                        epoch, data_total, data_t_total, num_source_train, loss_total / data_total,
+                                                                           loss_adv_total / data_total,
+                                                                           loss_node_total / data_total, cons
+                    ))
 
         # Testing
         with torch.no_grad():
@@ -236,12 +244,12 @@ def main():
             # Could be accelerated with multi-process?
             for eval_dataset in performance_test_sets.keys():
                 eval_dict = {
-                    "model" : copy.deepcopy(model),
+                    "model": copy.deepcopy(model),
                     "dataloader": performance_test_sets[eval_dataset],
                     "dataset": eval_dataset,
                     "best_target_acc": best_test_acc[eval_dataset],
                     "device": device,
-                    "criterion":criterion,
+                    "criterion": criterion,
                     "epoch": epoch
                 }
                 eval_result = eval_worker(eval_dict)
@@ -259,4 +267,3 @@ if __name__ == '__main__':
     main()
     time_pass = since - time.time()
     print('Training complete in {:.0f}m {:.0f}s'.format(time_pass // 60, time_pass % 60))
-

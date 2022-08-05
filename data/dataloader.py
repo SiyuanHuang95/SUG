@@ -21,7 +21,7 @@ def get_info(shapes_dir, isView=False):
     if isView:
         for shape_dir in shapes_dir:
             name = '_'.join(os.path.split(shape_dir)[
-                            1].split('.')[0].split('_')[:-1])
+                                1].split('.')[0].split('_')[:-1])
             if name in names_dict:
                 names_dict[name].append(shape_dir)
             else:
@@ -116,13 +116,13 @@ class Shapenet_data(data.Dataset):
                            for xyz in open(self.pc_list[idx], 'r') if len(xyz.split(' ')) == 3])[:self.pc_input_num, :]
         elif self.data_type == '*.npy':
             pc = np.load(self.pc_list[idx])[
-                :self.pc_input_num].astype(np.float32)
+                 :self.pc_input_num].astype(np.float32)
         pc = normal_pc(pc)
         if self.aug:
             pc = rotation_point_cloud(pc)
             pc = jitter_point_cloud(pc)
         pad_pc = np.zeros(
-            shape=(self.pc_input_num-pc.shape[0], 3), dtype=float)
+            shape=(self.pc_input_num - pc.shape[0], 3), dtype=float)
         pc = np.concatenate((pc, pad_pc), axis=0)
         pc = np.expand_dims(pc.transpose(), axis=2)
         return torch.from_numpy(pc).type(torch.FloatTensor), lbl
@@ -180,7 +180,7 @@ class Scannet_data_h5(data.Dataset):
 
 
 class UnifiedPointDG(data.Dataset):
-    def __init__(self, dataset_type,  pts, labels, status='train', pc_input_num=1024, aug=True):
+    def __init__(self, dataset_type, pts, labels, status='train', pc_input_num=1024, aug=True):
         super(UnifiedPointDG, self).__init__()
 
         self.num_points = pc_input_num
@@ -194,7 +194,7 @@ class UnifiedPointDG(data.Dataset):
         print(f"Create {status} Dataset {dataset_type} with pts {pts.shape[0]}")
 
     def __getitem__(self, index):
-        raw_pts = self.pts[index]
+        raw_pts = self.pts[index][:, :3]  # for ScanNet, only x-y-z features are used
         label = self.labels[index]
         pts = normal_pc(raw_pts)
 
@@ -241,7 +241,7 @@ def create_single_dataset(dataset_type, status="train", aug=False):
     pts, labels = include_dataset_full_information(dataset_type, status)
     assert len(set(labels.tolist())) == 10, "The class in labels is less than 10!"
     return UnifiedPointDG(dataset_type=dataset_type, pts=pts, labels=labels, status=status, aug=aug)
-    
+
 
 if __name__ == "__main__":
     pass

@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def normal_pc(pc):
     """
     normalize point cloud in range L
@@ -9,8 +10,9 @@ def normal_pc(pc):
     pc_mean = pc.mean(axis=0)
     pc = pc - pc_mean
     pc_L_max = np.max(np.sqrt(np.sum(abs(pc ** 2), axis=-1)))
-    pc = pc/pc_L_max
+    pc = pc / pc_L_max
     return pc
+
 
 def rotation_point_cloud(pc):
     """
@@ -126,7 +128,6 @@ def pc_augment(pc):
     pc = rotation_point_cloud(pc)
     pc = jitter_point_cloud(pc)
     # pc = random_scale_point_cloud(pc)
-#    pc = rotate_perturbation_point_cloud(pc)
+    #    pc = rotate_perturbation_point_cloud(pc)
     # pc = shift_point_cloud(pc)
     return pc
-

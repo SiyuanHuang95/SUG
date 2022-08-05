@@ -25,6 +25,7 @@ def farthest_point_sample(xyz, npoint):
         farthest = torch.max(distance, -1)[1]
     return centroids
 
+
 def index_points(points, idx):
     """
     Input:
@@ -42,13 +43,14 @@ def index_points(points, idx):
     repeat_shape = list(idx.shape)
     repeat_shape[0] = 1
     batch_indices = torch.arange(B, dtype=torch.long).to(device).view(view_shape).repeat(repeat_shape)
-    points = points.permute(0,2,1) #(B,N,C)
+    points = points.permute(0, 2, 1)  # (B,N,C)
     new_points = points[batch_indices, idx, :]
-    if len(new_points.shape)==3:
-        new_points = new_points.permute(0,2,1)
+    if len(new_points.shape) == 3:
+        new_points = new_points.permute(0, 2, 1)
     elif len(new_points.shape) == 4:
-        new_points = new_points.permute(0,3,1,2)
+        new_points = new_points.permute(0, 3, 1, 2)
     return new_points
+
 
 def query_ball_point(radius, nsample, xyz, new_xyz):
     """
@@ -72,8 +74,9 @@ def query_ball_point(radius, nsample, xyz, new_xyz):
         mask = group_idx == N
         group_idx[mask] = group_first[mask]
     else:
-        group_idx = torch.sort(sqrdists, dim=-1)[1][:,:,:nsample]
+        group_idx = torch.sort(sqrdists, dim=-1)[1][:, :, :nsample]
     return group_idx
+
 
 def square_distance(src, dst):
     """
@@ -96,6 +99,7 @@ def square_distance(src, dst):
     dist += torch.sum(dst ** 2, 1).view(B, 1, M)
     return dist
 
+
 def upsample_inter(xyz1, xyz2, points1, points2, k):
     """
     Input:
@@ -115,19 +119,19 @@ def upsample_inter(xyz1, xyz2, points1, points2, k):
     B, C, N = xyz1.size()
     _, _, S = xyz2.size()
 
-    dists = square_distance(xyz1, xyz2) #(B, N, S)
+    dists = square_distance(xyz1, xyz2)  # (B, N, S)
     dists, idx = dists.sort(dim=-1)
     dists, idx = dists[:, :, :k], idx[:, :, :k]  # [B, N, 3]
     dists[dists < 1e-10] = 1e-10
     weight = 1.0 / dists  # [B, N, 3]
     weight = weight / torch.sum(weight, dim=-1).view(B, N, 1)  # [B, N, 3]; weight = [64, 1024, 3]
-    interpolated_points = torch.sum(index_points(points2, idx) * weight.view(B, 1, N, k), dim=3) #(B,D,N); idx = [64, 1024, 3]; points2 = [64, 64, 64];
+    interpolated_points = torch.sum(index_points(points2, idx) * weight.view(B, 1, N, k),
+                                    dim=3)  # (B,D,N); idx = [64, 1024, 3]; points2 = [64, 64, 64];
     if points1 is not None:
         new_points = torch.cat([points1, interpolated_points], dim=1)  # points1 = [64, 64, 1024];
         return new_points
     else:
         return interpolated_points
-
 
 
 def pairwise_distance(x):
@@ -153,6 +157,7 @@ def gather_neighbor(x, nn_idx, n_neighbor):
     pc_n = torch.gather(point_expand, -1, nn_idx_expand)
     return pc_n
 
+
 def get_neighbor_feature(x, n_point, n_neighbor):
     if len(x.size()) == 3:
         x = x.unsqueeze()
@@ -175,6 +180,5 @@ def get_edge_feature(x, n_neighbor):
     _, nn_idx = torch.topk(adj_matrix, n_neighbor, dim=2, largest=False)
     point_cloud_neighbors = gather_neighbor(x, nn_idx, n_neighbor)
     point_cloud_center = x.expand(-1, -1, -1, n_neighbor)
-    edge_feature = torch.cat((point_cloud_center, point_cloud_neighbors-point_cloud_center), dim=1)
+    edge_feature = torch.cat((point_cloud_center, point_cloud_neighbors - point_cloud_center), dim=1)
     return edge_feature
-
