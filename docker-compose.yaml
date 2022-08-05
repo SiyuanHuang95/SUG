@@ -14,3 +14,4 @@ services:
     volumes:
       - ${PWD}/:/point_dg/workspace
       - ${DATA}:/point_dg/data
+      - ${LOG}:/point_dg/workspace/logs

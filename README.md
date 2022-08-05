@@ -15,12 +15,13 @@
 
 ### Docker Environment
 1. Ensure that you have installed Docker, NVIDIA-Container toolkit
-2. Export data env variable, which will let the docker have the volume attach to the data folder.
+2. Export data and log (optional) env variable, which will let the docker have the volume attach to the data and log folder.
 
 ```
     export DATA=/hdd1/huangsiyuan/PointDA_data/
+    export LOG=/hdd1/huangsiyuan/logs/
 ```
-3. To let the docker have the GPU access:
+3. To let the docker have the GPU access, make nvidia the default runtime in /etc/docker/daemon.json:
 ```
 {
     "runtimes": {
@@ -31,7 +32,7 @@
     },
     "default-runtime": "nvidia" 
 }
-
+Save the file and run sudo systemctl restart docker to restart docker.
 ```
 4. build the docker:
 

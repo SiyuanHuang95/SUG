@@ -6,7 +6,8 @@ RUN mkdir -p  $PROJECT/logs && mkdir -p $PROJECT/workspace/ && mkdir $PROJECT/da
 
 # Copy the repo file to docker
 COPY . $PROJECT/workspace
-RUN cd $PROJECT/workspace && pip install -r requirements.txt && conda install -n base ipykernel --update-deps --force-reinstall
+# Recommand to pip install after docker built
+# RUN cd $PROJECT/workspace && pip install -r requirements.txt && conda install -n base ipykernel --update-deps --force-reinstall
 
 # RUN python3 -m pip install --editable .
 # Complie the project environment if needed
