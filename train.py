@@ -1,3 +1,4 @@
+from copy import copy
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -17,6 +18,9 @@ import model.mmd as mmd
 # from utils import *
 import math
 import warnings
+from multiprocessing import Pool
+import copy
+from utils.eval_utils import eval_worker
 
 from tensorboardX import SummaryWriter
 
@@ -25,7 +29,6 @@ warnings.filterwarnings("ignore")
 # Command setting
 parser = argparse.ArgumentParser(description='Main')
 parser.add_argument('-source', '-s', type=str, help='source dataset', default='scannet')
-parser.add_argument('-target', '-t', type=str, help='target dataset', default='modelnet')
 parser.add_argument('-batchsize', '-b', type=int, help='batch size', default=64)
 parser.add_argument('-gpu', '-g', type=str, help='cuda id', default='0')
 parser.add_argument('-epochs', '-e', type=int, help='training epoch', default=200)
@@ -58,8 +61,11 @@ else:
 # print(dir_root)
 def main():
     print ('Start Training\nInitiliazing\n')
-    print('src:', args.source)
-    print('tar:', args.target) 
+    print('The source domain is set to:', args.source)
+
+    dataset_list = ["scannet", "shapenet", "modelnet"]
+    test_datasets = list(set(dataset_list) - set([args.source]))
+    print('The datasets used for testing:', test_datasets) 
 
     # Data loading
 
@@ -73,24 +79,36 @@ def main():
 
     source_test_dataset = data_func[args.source](pc_input_num=1024, status='test', aug=False, pc_root= \
         dir_root + args.source)
-    target_test_dataset1 = data_func[args.target](pc_input_num=1024, status='test', aug=False, pc_root= \
-        dir_root + args.target)
+    target_test_dataset1 = data_func[test_datasets[0]](pc_input_num=1024, status='test', aug=False, pc_root= \
+        dir_root + test_datasets[0])
+    target_test_dataset2 = data_func[test_datasets[-1]](pc_input_num=1024, status='test', aug=False, pc_root= \
+        dir_root + test_datasets[-1])
 
     num_source_train = len(source_train_dataset)
     num_source_test = len(source_test_dataset)
     num_target_train1 = len(target_train_dataset1)
     num_target_test1 = len(target_test_dataset1)
+    num_target_test2 = len(target_test_dataset2)
 
     source_train_dataloader = DataLoader(source_train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2, drop_last=True)
-    source_test_dataloader = DataLoader(source_test_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2, drop_last=True)
     target_train_dataloader1 = DataLoader(target_train_dataset1, batch_size=BATCH_SIZE, shuffle=True, num_workers=2, drop_last=True)
+    
+    # should also check the source test performance to avoid the de-grade
+    source_test_dataloader = DataLoader(source_test_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2, drop_last=True)
     target_test_dataloader1 = DataLoader(target_test_dataset1, batch_size=BATCH_SIZE, shuffle=True, num_workers=2, drop_last=True)
+    target_test_dataloader2 = DataLoader(target_test_dataset2, batch_size=BATCH_SIZE, shuffle=True, num_workers=2, drop_last=True)
+    performance_test_sets = {"source": source_test_dataloader, "test1": target_test_dataloader1, "test2": target_test_dataloader2}
 
-    print('num_source_train: {:d}, num_source_test: {:d}, num_target_test1: {:d} '.format(num_source_train, num_source_test, num_target_test1))
+    print(f"Num of source train: {num_source_train}, Num of target train: {num_target_train1}")
+    print(f"Num of source test: {num_source_test}, Num of test on {test_datasets[0]} {num_target_test1}, on {test_datasets[-1]} {num_target_test2}")
     print('batch_size:', BATCH_SIZE)
 
-    # Model
+    best_test_acc = {"source": 0, "test1": 0, "test2": 0}
+    # pool_eval = Pool(processes=len(dataset_list))
+    # AssertionError: daemonic processes are not allowed to have children
 
+
+    # Model
     model = mM.Net_MDA()
     model = model.to(device=device)
 
@@ -137,8 +155,6 @@ def main():
             tensor = tensor.cuda()
         return Variable(tensor, volatile=volatile)
 
-    best_target_test_acc = 0
-
     for epoch in range(max_epoch):
         since_e = time.time()
             
@@ -162,7 +178,7 @@ def main():
         # Training
 
         for batch_idx, (batch_s, batch_t) in enumerate(zip(source_train_dataloader, target_train_dataloader1)):
-
+            # TODO should check how the batch_s and batch_t are sampled
             data, label = batch_s
             data_t, label_t = batch_t
 
@@ -218,38 +234,22 @@ def main():
                 ))
 
         # Testing
-
         with torch.no_grad():
             model.eval()
-            loss_total = 0
-            correct_total = 0
-            data_total = 0
-            acc_class = torch.zeros(10,1)
-            acc_to_class = torch.zeros(10,1)
-            acc_to_all_class = torch.zeros(10,10)
-
-            for batch_idx, (data,label) in enumerate(target_test_dataloader1):
-                data = data.to(device=device)
-                label = label.to(device=device).long()
-                pred1, pred2 = model(data)
-                output = (pred1 + pred2)/2
-                loss = criterion(output, label)
-                _, pred = torch.max(output, 1)
-
-                loss_total += loss.item() * data.size(0)
-                correct_total += torch.sum(pred == label)
-                data_total += data.size(0)
-
-            pred_loss = loss_total/data_total
-            pred_acc = correct_total.double()/data_total
-
-            if pred_acc > best_target_test_acc:
-                best_target_test_acc = pred_acc
-            print ('Target 1:{} [overall_acc: {:.4f} \t loss: {:.4f} \t Best Target Acc: {:.4f}]'.format(
-            epoch, pred_acc, pred_loss, best_target_test_acc
-            ))
-            writer.add_scalar('accs/target_test_acc', pred_acc, epoch)
-
+            # Could be accelerated with multi-process?
+            for eval_dataset in performance_test_sets.keys():
+                eval_dict = {
+                    "model" : copy.deepcopy(model),
+                    "dataloader": performance_test_sets[eval_dataset],
+                    "dataset": eval_dataset,
+                    "best_target_acc": best_test_acc[eval_dataset],
+                    "device": device,
+                    "criterion":criterion,
+                    "epoch": epoch
+                }
+                eval_result = eval_worker(eval_dict)
+                writer_item = 'acc/' + eval_result["dataset"] + "_test_acc"
+                writer.add_scalar(writer_item, eval_result["best_target_acc"], epoch)
 
         time_pass_e = time.time() - since_e
         print('The {} epoch takes {:.0f}m {:.0f}s'.format(epoch, time_pass_e // 60, time_pass_e % 60))
