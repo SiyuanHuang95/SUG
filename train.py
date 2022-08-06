@@ -41,11 +41,11 @@ parser.add_argument('-weight', type=float, help='weight of src loss', default=1.
 parser.add_argument('-datadir', type=str, help='directory of data', default='./dataset/')
 parser.add_argument('-tb_log_dir', type=str, help='directory of tb', default='./logs')
 parser.add_argument('-target_cls_loss', type=float, help="the wights for cls loss from target split", default=1.0)
-parser.add_argument('-class_mmd', type=bool, help="Use MMD loss only within the same cls", default=True)
+parser.add_argument('-class_mmd', action='store_true', help="Use MMD loss only within the same cls", default=True)
 parser.add_argument('--ckpt_save_interval', type=int, default=5, help='number of training epochs')
 parser.add_argument('--max_ckpt_save_num', type=int, default=50, help='max number of saved checkpoint')
 parser.add_argument('--pretrained_model', type=str, default=None, help='pretrained_model')
-
+parser.add_argument('--spliter_2_fullsize',  action='store_true', default=True)
 args = parser.parse_args()
 
 if not os.path.exists(os.path.join(os.getcwd(), args.tb_log_dir)):
@@ -82,7 +82,7 @@ def main():
     # Data loading
     split_config = {
             "split_method": "random",
-            "subset_2_fullsize": True,
+            "subset_2_fullsize": args.spliter_2_fullsize,
             "sample_rate": 0.5
         }
     source_train_subsets = create_splitted_dataset(dataset_type=args.source, status="train", config=split_config)
@@ -277,9 +277,8 @@ def main():
 
         trained_epoch = epoch + 1
         if trained_epoch % args.ckpt_save_interval == 0:
-            ckpt_list = [cpkt for cpkt in os.listdir(ckpt_dir) if ".pth" in cpkt]
+            ckpt_list = [os.path.join(ckpt_dir, cpkt) for cpkt in os.listdir(ckpt_dir) if ".pth" in cpkt]
             ckpt_list.sort(key=os.path.getmtime)
-
             if ckpt_list.__len__() >= args.max_ckpt_save_num:
                 for cur_file_idx in range(0, len(ckpt_list) - args.max_ckpt_save_num + 1):
                     os.remove(ckpt_list[cur_file_idx])

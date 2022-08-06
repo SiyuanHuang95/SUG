@@ -45,7 +45,7 @@ else:
     dir_root = args.datadir
 
 output_dir = os.path.join(dir_root , 'output')
-ckpt_dir = os.path.join(output_dir , 'ckpt', 'source_train')
+ckpt_dir = os.path.join(output_dir , 'ckpt', 'source_train', args.source)
 if not os.path.exists(output_dir): os.makedirs(output_dir) 
 if not os.path.exists(ckpt_dir): os.makedirs(ckpt_dir) 
 
@@ -134,14 +134,14 @@ def main():
                 trained_epoch = epoch + 1
         
         if trained_epoch % args.ckpt_save_interval == 0:
-            ckpt_list = [cpkt for cpkt in os.listdir(ckpt_dir) if ".pth" in cpkt]
+            ckpt_list = [os.path.join(ckpt_dir, cpkt) for cpkt in os.listdir(ckpt_dir) if ".pth" in cpkt]
             ckpt_list.sort(key=os.path.getmtime)
 
             if ckpt_list.__len__() >= args.max_ckpt_save_num:
                 for cur_file_idx in range(0, len(ckpt_list) - args.max_ckpt_save_num + 1):
                     os.remove(ckpt_list[cur_file_idx])
 
-            ckpt_name = os.path.join(ckpt_dir , args.source + ('checkpoint_epoch_%d' % trained_epoch) )
+            ckpt_name = os.path.join(ckpt_dir , ('checkpoint_epoch_%d' % trained_epoch) )
             print(f"Save current ckpt to {ckpt_name}")
             save_checkpoint(checkpoint_state(model, epoch=trained_epoch), filename=ckpt_name)
 
