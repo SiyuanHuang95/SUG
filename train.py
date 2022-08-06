@@ -38,6 +38,8 @@ parser.add_argument('-scaler', type=float, help='scaler of learning rate', defau
 parser.add_argument('-weight', type=float, help='weight of src loss', default=1.)
 parser.add_argument('-datadir', type=str, help='directory of data', default='./dataset/')
 parser.add_argument('-tb_log_dir', type=str, help='directory of tb', default='./logs')
+parser.add_argument('-target_cls_loss', type=float, help="the wights for cls loss from target split", default=1.0)
+parser.add_argument('-class_mmd', type=bool, help="Use MMD loss only within the same cls", default=True)
 args = parser.parse_args()
 
 if not os.path.exists(os.path.join(os.getcwd(), args.tb_log_dir)):
@@ -180,9 +182,7 @@ def main():
         cons = math.sin((epoch + 1) / max_epoch * math.pi / 2)
 
         # Training
-
         for batch_idx, (batch_s, batch_t) in enumerate(zip(source_train_dataloader, target_train_dataloader1)):
-            # TODO should check how the batch_s and batch_t are sampled
             data, label = batch_s
             data_t, label_t = batch_t
 
@@ -195,16 +195,20 @@ def main():
             pred_t1, pred_t2 = model(data_t, constant=cons, adaptation=True)
 
             # Classification loss
-
             loss_s1 = criterion(pred_s1, label)
             loss_s2 = criterion(pred_s2, label)
 
-            # Adversarial loss
-
+            # Adversarial loss -> let two heads of the model output similiar
             loss_adv = - 1 * discrepancy(pred_t1, pred_t2)
 
             loss_s = loss_s1 + loss_s2
-            loss = args.weight * loss_s + loss_adv
+            if args.target_cls_loss > 0:
+                loss_t1 = criterion(pred_t1, label)
+                loss_t2 = criterion(pred_t2, label)
+                loss_t = loss_t1 + loss_t2
+                loss = args.weight * loss_s + loss_adv + args.target_cls_loss * loss_t
+            else:
+                loss = args.weight * loss_s + loss_adv
 
             loss.backward()
             optimizer_g.step()
@@ -213,11 +217,19 @@ def main():
             optimizer_c.zero_grad()
 
             # Local Alignment
-
             feat_node_s = model(data, node_adaptation_s=True)
             feat_node_t = model(data_t, node_adaptation_t=True)
             sigma_list = [0.01, 0.1, 1, 10, 100]
-            loss_node_adv = 1 * mmd.mix_rbf_mmd2(feat_node_s, feat_node_t, sigma_list)
+            if args.class_mmd:
+                if label == label_t:
+                    # TODO for batch training...how to compare the label
+                    loss_node_adv = 1 * mmd.mix_rbf_mmd2(feat_node_s, feat_node_t, sigma_list)
+                    # Only enfore the feature align when the source and target have the same label
+                else:
+                    loss_node_adv = 1 * mmd.mix_rbf_mmd2(feat_node_s, feat_node_s, sigma_list)
+                    # Useless func, only used to keep the same logical
+            else:
+                loss_node_adv = 1 * mmd.mix_rbf_mmd2(feat_node_s, feat_node_t, sigma_list)
             loss = loss_node_adv
 
             loss.backward()

@@ -1,5 +1,4 @@
 import os
-from tkinter import N
 import h5py
 import glob
 import numpy as np
