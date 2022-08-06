@@ -24,9 +24,11 @@ def split_dataset(dataset_type, split_config=None, status='train'):
 
     dataset_spliter = {}
     index_subset_1, index_subset_2 = None, None
+    subset_2_size = 1 if split_config["subset_2_fullsize"] else 0.5
+    size_usage = split_config["sample_rate"] + subset_2_size
     # index_config_naming = str(datetime.datetime.now()) + split_config["split_method"] + "_" + str(
     #     split_config["sample_rate"]) + ".pkl"
-    index_config_naming = split_config["split_method"] + "_" + str(split_config["sample_rate"]) + ".pkl"
+    index_config_naming = "size_" + str(size_usage) + split_config["split_method"] + "_" + str(split_config["sample_rate"]) + ".pkl"
     index_file_storage = os.path.join(dataset_path, index_config_naming)
     if os.path.exists(index_file_storage):
         print(f"Direct load the indexing history from {index_file_storage}")

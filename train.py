@@ -80,14 +80,15 @@ def main():
     print('The datasets used for testing:', test_datasets)
 
     # Data loading
-
-    data_func = {'modelnet': Modelnet40_data, 'scannet': Scannet_data_h5, 'shapenet': Shapenet_data}
-
-    # source_train_dataset = data_func[args.source](pc_input_num=1024, status='train', aug=True, pc_root = dir_root + args.source)
-    # target_train_dataset1 = data_func[args.target](pc_input_num=1024, status='train', aug=True,  pc_root = dir_root + args.target)
-    source_train_subsets = create_splitted_dataset(dataset_type=args.source, status="train")
-    source_train_dataset = source_train_subsets[0]
-    target_train_dataset1 = source_train_subsets[1]
+    split_config = {
+            "split_method": "random",
+            "subset_2_fullsize": True,
+            "sample_rate": 0.5
+        }
+    source_train_subsets = create_splitted_dataset(dataset_type=args.source, status="train", config=split_config)
+    source_train_dataset = source_train_subsets[1]
+    target_train_dataset1 = source_train_subsets[0]
+    # split 2 is fullsize
 
     source_test_dataset = create_single_dataset(args.source, status="test", aug=False)
     target_test_dataset1 = create_single_dataset(test_datasets[0], status="test", aug=False)
