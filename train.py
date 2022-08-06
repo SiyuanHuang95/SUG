@@ -217,21 +217,19 @@ def main():
             optimizer_c.zero_grad()
 
             # Local Alignment
-            feat_node_s = model(data, node_adaptation_s=True)
+            feat_node_s = model(data, node_adaptation_s=True)  # shape: batch_size * 4096
             feat_node_t = model(data_t, node_adaptation_t=True)
             sigma_list = [0.01, 0.1, 1, 10, 100]
             if args.class_mmd:
-                if label == label_t:
-                    # TODO for batch training...how to compare the label
-                    loss_node_adv = 1 * mmd.mix_rbf_mmd2(feat_node_s, feat_node_t, sigma_list)
-                    # Only enfore the feature align when the source and target have the same label
-                else:
-                    loss_node_adv = 1 * mmd.mix_rbf_mmd2(feat_node_s, feat_node_s, sigma_list)
-                    # Useless func, only used to keep the same logical
+                # Only enfore the feature align when the source and target have the same label
+                same_class_index = torch.eq(label, label_t)
+                selected_feat_node_s = feat_node_s[same_class_index]
+                selected_feat_node_t = feat_node_t[same_class_index]
+
+                loss_node_adv = 1 * mmd.mix_rbf_mmd2(selected_feat_node_s, selected_feat_node_t, sigma_list)
             else:
                 loss_node_adv = 1 * mmd.mix_rbf_mmd2(feat_node_s, feat_node_t, sigma_list)
             loss = loss_node_adv
-
             loss.backward()
             optimizer_dis.step()
             optimizer_dis.zero_grad()
