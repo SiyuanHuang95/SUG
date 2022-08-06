@@ -12,6 +12,7 @@ from torch.autograd import Variable
 import time
 import numpy as np
 import os
+import glob
 import argparse
 import pdb
 import model.mmd as mmd
@@ -21,6 +22,7 @@ import warnings
 from multiprocessing import Pool
 import copy
 from utils.eval_utils import eval_worker
+from utils.train_utils import save_checkpoint, checkpoint_state
 
 from tensorboardX import SummaryWriter
 
@@ -40,6 +42,10 @@ parser.add_argument('-datadir', type=str, help='directory of data', default='./d
 parser.add_argument('-tb_log_dir', type=str, help='directory of tb', default='./logs')
 parser.add_argument('-target_cls_loss', type=float, help="the wights for cls loss from target split", default=1.0)
 parser.add_argument('-class_mmd', type=bool, help="Use MMD loss only within the same cls", default=True)
+parser.add_argument('--ckpt_save_interval', type=int, default=5, help='number of training epochs')
+parser.add_argument('--max_ckpt_save_num', type=int, default=50, help='max number of saved checkpoint')
+parser.add_argument('--pretrained_model', type=str, default=None, help='pretrained_model')
+
 args = parser.parse_args()
 
 if not os.path.exists(os.path.join(os.getcwd(), args.tb_log_dir)):
@@ -60,8 +66,11 @@ if 'data' not in args.datadir:
 else:
     dir_root = args.datadir
 
+output_dir = os.path.join(dir_root , 'output')
+ckpt_dir = os.path.join(output_dir , 'ckpt', 'DG_exp')
+if not os.path.exists(output_dir): os.makedirs(output_dir) 
+if not os.path.exists(ckpt_dir): os.makedirs(ckpt_dir) 
 
-# print(dir_root)
 def main():
     print('Start Training\nInitiliazing\n')
     print('The source domain is set to:', args.source)
@@ -95,7 +104,6 @@ def main():
     target_train_dataloader1 = DataLoader(target_train_dataset1, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
                                           drop_last=True)
 
-    # should also check the source test performance to avoid the de-grade
     source_test_dataloader = DataLoader(source_test_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
                                         drop_last=True)
     target_test_dataloader1 = DataLoader(target_test_dataset1, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
@@ -266,6 +274,19 @@ def main():
                 writer_item = 'acc/' + eval_result["dataset"] + "_test_acc"
                 writer.add_scalar(writer_item, eval_result["best_target_acc"], epoch)
 
+        trained_epoch = epoch + 1
+        if trained_epoch % args.ckpt_save_interval == 0:
+            ckpt_list = [cpkt for cpkt in os.listdir(ckpt_dir) if ".pth" in cpkt]
+            ckpt_list.sort(key=os.path.getmtime)
+
+            if ckpt_list.__len__() >= args.max_ckpt_save_num:
+                for cur_file_idx in range(0, len(ckpt_list) - args.max_ckpt_save_num + 1):
+                    os.remove(ckpt_list[cur_file_idx])
+
+            ckpt_name = os.path.join(ckpt_dir , args.source + ('checkpoint_epoch_%d' % trained_epoch) )
+            print(f"Save current ckpt to {ckpt_name}")
+            save_checkpoint(checkpoint_state(model, epoch=trained_epoch), filename=ckpt_name)
+        
         time_pass_e = time.time() - since_e
         print('The {} epoch takes {:.0f}m {:.0f}s'.format(epoch, time_pass_e // 60, time_pass_e % 60))
         print(args)

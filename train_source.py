@@ -8,6 +8,8 @@ import time
 import os
 import argparse
 from tensorboardX import SummaryWriter
+from utils.train_utils import save_checkpoint, checkpoint_state
+
 
 # Command setting
 parser = argparse.ArgumentParser(description='Main')
@@ -20,6 +22,8 @@ parser.add_argument('-epochs', '-e', type=int, help='training epoch', default=20
 parser.add_argument('-lr', type=float, help='learning rate', default=0.001)
 parser.add_argument('-datadir', type=str, help='directory of data', default='/repository/yhx/')
 parser.add_argument('-tb_log_dir', type=str, help='directory of tb', default='./logs/src_m_s_ss')
+parser.add_argument('--ckpt_save_interval', type=int, default=5, help='number of training epochs')
+parser.add_argument('--max_ckpt_save_num', type=int, default=50, help='max number of saved checkpoint')
 args = parser.parse_args()
 
 if not os.path.exists(os.path.join(os.getcwd(), args.tb_log_dir)):
@@ -40,6 +44,10 @@ if 'data' not in args.datadir:
 else:
     dir_root = args.datadir
 
+output_dir = os.path.join(dir_root , 'output')
+ckpt_dir = os.path.join(output_dir , 'ckpt', 'source_train')
+if not os.path.exists(output_dir): os.makedirs(output_dir) 
+if not os.path.exists(ckpt_dir): os.makedirs(ckpt_dir) 
 
 def main():
     print ('Start Training\nInitiliazing\n')
@@ -123,7 +131,19 @@ def main():
             if (batch_idx + 1) % 10 == 0:
                 print('Train:{} [{} /{}  loss: {:.4f} \t]'.format(
                 epoch, data_total, num_source_train, loss_total/data_total))
+                trained_epoch = epoch + 1
+        
+        if trained_epoch % args.ckpt_save_interval == 0:
+            ckpt_list = [cpkt for cpkt in os.listdir(ckpt_dir) if ".pth" in cpkt]
+            ckpt_list.sort(key=os.path.getmtime)
 
+            if ckpt_list.__len__() >= args.max_ckpt_save_num:
+                for cur_file_idx in range(0, len(ckpt_list) - args.max_ckpt_save_num + 1):
+                    os.remove(ckpt_list[cur_file_idx])
+
+            ckpt_name = os.path.join(ckpt_dir , args.source + ('checkpoint_epoch_%d' % trained_epoch) )
+            print(f"Save current ckpt to {ckpt_name}")
+            save_checkpoint(checkpoint_state(model, epoch=trained_epoch), filename=ckpt_name)
 
         with torch.no_grad():
             model.eval()
@@ -254,7 +274,7 @@ def main():
                 epoch, pred_acc, pred_loss, best_target_test_acc2
             ))
             writer.add_scalar('accs/target2_test_acc', pred_acc, epoch)
-
+            
 
 
 if __name__ == '__main__':
