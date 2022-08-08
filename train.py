@@ -45,7 +45,7 @@ parser.add_argument('-class_mmd', action='store_true', help="Use MMD loss only w
 parser.add_argument('--ckpt_save_interval', type=int, default=5, help='number of training epochs')
 parser.add_argument('--max_ckpt_save_num', type=int, default=50, help='max number of saved checkpoint')
 parser.add_argument('--pretrained_model', type=str, default=None, help='pretrained_model')
-parser.add_argument('--spliter_2_fullsize',  action='store_true', default=True)
+parser.add_argument('--spliter_2_fullsize', action='store_true', default=True)
 args = parser.parse_args()
 
 if not os.path.exists(os.path.join(os.getcwd(), args.tb_log_dir)):
@@ -66,25 +66,26 @@ if 'data' not in args.datadir:
 else:
     dir_root = args.datadir
 
-output_dir = os.path.join(dir_root , 'output')
-ckpt_dir = os.path.join(output_dir , 'ckpt', 'DG_exp')
-if not os.path.exists(output_dir): os.makedirs(output_dir) 
-if not os.path.exists(ckpt_dir): os.makedirs(ckpt_dir) 
+output_dir = os.path.join(dir_root, 'output')
+ckpt_dir = os.path.join(output_dir, 'ckpt', 'DG_exp')
+if not os.path.exists(output_dir): os.makedirs(output_dir)
+if not os.path.exists(ckpt_dir): os.makedirs(ckpt_dir)
+
 
 def main():
     print('Start Training\nInitiliazing\n')
     print('The source domain is set to:', args.source)
 
     dataset_list = ["scannet", "shapenet", "modelnet"]
-    test_datasets = list(set(dataset_list) - set([args.source]))
+    test_datasets = list(set(dataset_list) - {args.source})
     print('The datasets used for testing:', test_datasets)
 
     # Data loading
     split_config = {
-            "split_method": "random",
-            "subset_2_fullsize": args.spliter_2_fullsize,
-            "sample_rate": 0.5
-        }
+        "split_method": "random",
+        "subset_2_fullsize": args.spliter_2_fullsize,
+        "sample_rate": 0.5
+    }
     source_train_subsets = create_splitted_dataset(dataset_type=args.source, status="train", config=split_config)
     source_train_dataset = source_train_subsets[1]
     target_train_dataset1 = source_train_subsets[0]
@@ -272,6 +273,7 @@ def main():
                     "epoch": epoch
                 }
                 eval_result = eval_worker(eval_dict)
+                best_test_acc[eval_dataset] = eval_result["best_target_acc"]
                 writer_item = 'acc/' + eval_result["dataset"] + "_test_acc"
                 writer.add_scalar(writer_item, eval_result["best_target_acc"], epoch)
 
@@ -283,10 +285,10 @@ def main():
                 for cur_file_idx in range(0, len(ckpt_list) - args.max_ckpt_save_num + 1):
                     os.remove(ckpt_list[cur_file_idx])
 
-            ckpt_name = os.path.join(ckpt_dir , args.source + ('checkpoint_epoch_%d' % trained_epoch) )
+            ckpt_name = os.path.join(ckpt_dir, args.source + ('checkpoint_epoch_%d' % trained_epoch))
             print(f"Save current ckpt to {ckpt_name}")
             save_checkpoint(checkpoint_state(model, epoch=trained_epoch), filename=ckpt_name)
-        
+
         time_pass_e = time.time() - since_e
         print('The {} epoch takes {:.0f}m {:.0f}s'.format(epoch, time_pass_e // 60, time_pass_e % 60))
         print(args)
