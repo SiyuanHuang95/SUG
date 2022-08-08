@@ -1,17 +1,21 @@
-# 3D Transfer Learning - PointDAN
+# Domain Generalization for 3D Point Cloud 
 
 ## TODO List
 
-[X] Split one dataset to different domains, and fake it as the Source_s and Target_s
-    [X] random split -> should save the random index to reproduce the experiment
 [X] Give the acc report on the another dataset
+
 [ ] Set the data path with config
-[ ] Add config parse
-[ ] should bind the volume of logs/ with local host 
+
+[x] Add config parse
+
+[x] should bind the volume of logs/ with local host 
 
 ## Requirements
-- Python 3.6
-- PyTorch 1.0
+
+### Setup from scratch
+- Python 3.8
+- PyTorch 1.8.0
+- others from requirements.txt
 
 ### Docker Environment
 1. Ensure that you have installed Docker, NVIDIA-Container toolkit
@@ -53,33 +57,14 @@ ERROR: Couldn’t connect to Docker daemon at http+docker://localunixsocket - is
 - sudo su
 - su huangsiyuan
 
-## File Structure
-```
-.
-├── README.md
-├── logs                            
-├── dataset
-│   └──PointDA_data                              
-│      ├── modelnet                      
-│      ├── scannet
-│      └── shapenet             
-├── dataloader.py
-├── data_utils.py
-├── main.sh
-├── mmd.py
-├── Model.py
-├── model_utils.py
-├── train.py            
-└── train_source.py                                   
-```
 
 ## Data Download
-Download the [PointDA-10](https://drive.google.com/file/d/1-LfJWL5geF9h0Z2QpdTL0n4lShy8wy2J/view?usp=sharing) and extract it as the dataset fold.
+Download the [PointDA-10](https://drive.google.com/file/d/1-LfJWL5geF9h0Z2QpdTL0n4lShy8wy2J/view?usp=sharing) and extract it as the dataset fold. 
 
 ## Train & Test
-If you run the experiment on one adaptation scanerio, like scannet to modelnet,
+If you run the experiment on one generalization scanerio, like scannet to others,
 ```
-python train.py -source scannet -target modelnet
+python train.py -source scannet
 ```
 , or run experiments on all adaptation scenarios.
 ```
