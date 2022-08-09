@@ -13,8 +13,9 @@ def split_dataset(dataset_type, split_config=None, status='train'):
     if split_config is None:
         split_config = {
             "split_method": "random",
-            "subset_2_fullsize": True,
-            "sample_rate": 0.5
+            "subset_fullsize": True,
+            "sample_rate": 0.5,
+            "train_base": 0
         }
 
     dataset_path = os.path.join(data_root, dataset_type)
@@ -24,7 +25,7 @@ def split_dataset(dataset_type, split_config=None, status='train'):
 
     dataset_spliter = {}
     index_subset_1, index_subset_2 = None, None
-    subset_2_size = 1 if split_config["subset_2_fullsize"] else 0.5
+    subset_2_size = 1 if split_config["subset_fullsize"] else 0.5
     size_usage = split_config["sample_rate"] + subset_2_size
     # index_config_naming = str(datetime.datetime.now()) + split_config["split_method"] + "_" + str(
     #     split_config["sample_rate"]) + ".pkl"
@@ -46,7 +47,7 @@ def split_dataset(dataset_type, split_config=None, status='train'):
             index_subset_1 = np.random.choice(
                 index_array, replace=False, size=subset_size)
 
-            if not split_config["subset_2_fullsize"]:
+            if not split_config["subset_fullsize"]:
                 index_subset_2 = np.setdiff1d(index_array, index_subset_1)
             else:
                 index_subset_2 = index_array

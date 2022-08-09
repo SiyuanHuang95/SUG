@@ -39,11 +39,12 @@ parser.add_argument('-weight', type=float, help='weight of src loss', default=1.
 parser.add_argument('-datadir', type=str, help='directory of data', default='./dataset/')
 parser.add_argument('-tb_log_dir', type=str, help='directory of tb', default='./logs')
 parser.add_argument('-target_cls_loss', type=float, help="the wights for cls loss from target split", default=1.0)
-parser.add_argument('-class_mmd', action='store_true', help="Use MMD loss only within the same cls", default=True)
+parser.add_argument('-class_mmd', action='store_true', help="Use MMD loss only within the same cls", default=False)
 parser.add_argument('--ckpt_save_interval', type=int, default=5, help='number of training epochs')
 parser.add_argument('--max_ckpt_save_num', type=int, default=50, help='max number of saved checkpoint')
 parser.add_argument('--pretrained_model', type=str, default=None, help='pretrained_model')
-parser.add_argument('--spliter_2_fullsize', action='store_true', default=True)
+parser.add_argument('--spliter_fullsize', action='store_true', default=False)
+parser.add_argument('--train_base',type=int, default=1, help="Use which part as main training, default 1 to be full label" )
 args = parser.parse_args()
 
 if not os.path.exists(os.path.join(os.getcwd(), args.tb_log_dir)):
@@ -81,12 +82,13 @@ def main():
     # Data loading
     split_config = {
         "split_method": "random",
-        "subset_2_fullsize": args.spliter_2_fullsize,
-        "sample_rate": 0.5
+        "subset_fullsize": args.spliter_fullsize,
+        "sample_rate": 0.5,
+        "train_base": args.train_base
     }
     source_train_subsets = create_splitted_dataset(dataset_type=args.source, status="train", config=split_config)
-    source_train_dataset = source_train_subsets[1]
-    target_train_dataset1 = source_train_subsets[0]
+    source_train_dataset = source_train_subsets[split_config["train_base"]]
+    target_train_dataset1 = source_train_subsets[1-split_config["train_base"]]
     # split 2 is fullsize
 
     source_test_dataset = create_single_dataset(args.source, status="test", aug=False)
