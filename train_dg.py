@@ -6,9 +6,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from model.model_pointnet import Pointnet_cls as Pointnet_cls
 import model.Model as mM
-from data.dataloader import Modelnet40_data, Shapenet_data, Scannet_data_h5
 from data.dataloader import create_splitted_dataset, create_single_dataset
-from torch.autograd import Variable
 import time
 import numpy as np
 import os
@@ -22,7 +20,7 @@ import warnings
 from multiprocessing import Pool
 import copy
 from utils.eval_utils import eval_worker
-from utils.train_utils import save_checkpoint, checkpoint_state
+from utils.train_utils import save_checkpoint, checkpoint_state, adjust_learning_rate, discrepancy
 
 from tensorboardX import SummaryWriter
 
@@ -149,34 +147,13 @@ def main():
                                lr=LR * args.scaler, weight_decay=weight_decay)
     lr_schedule_dis = optim.lr_scheduler.CosineAnnealingLR(optimizer_dis, T_max=args.epochs + remain_epoch)
 
-    def adjust_learning_rate(optimizer, epoch):
-        """Sets the learning rate to the initial LR decayed by half by every 5 or 10 epochs"""
-        if epoch > 0:
-            if epoch <= 30:
-                lr = args.lr * args.scaler * (0.5 ** (epoch // 5))
-            else:
-                lr = args.lr * args.scaler * (0.5 ** (epoch // 10))
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = lr
-            writer.add_scalar('lr_dis', lr, epoch)
-
-    def discrepancy(out1, out2):
-        """discrepancy loss"""
-        out = torch.mean(torch.abs(F.softmax(out1, dim=-1) - F.softmax(out2, dim=-1)))
-        return out
-
-    def make_variable(tensor, volatile=False):
-        """Convert Tensor to Variable."""
-        if torch.cuda.is_available():
-            tensor = tensor.cuda()
-        return Variable(tensor, volatile=volatile)
 
     for epoch in range(max_epoch):
         since_e = time.time()
 
         lr_schedule_g.step(epoch=epoch)
         lr_schedule_c.step(epoch=epoch)
-        adjust_learning_rate(optimizer_dis, epoch)
+        adjust_learning_rate(optimizer_dis, epoch, args.lr, args.scaler, writer)
 
         writer.add_scalar('lr_g', lr_schedule_g.get_lr()[0], epoch)
         writer.add_scalar('lr_c', lr_schedule_c.get_lr()[0], epoch)
@@ -285,7 +262,7 @@ def main():
                 for cur_file_idx in range(0, len(ckpt_list) - args.max_ckpt_save_num + 1):
                     os.remove(ckpt_list[cur_file_idx])
 
-            ckpt_name = os.path.join(ckpt_dir, args.source + ('checkpoint_epoch_%d' % trained_epoch))
+            ckpt_name = os.path.join(ckpt_dir, args.source + ('_checkpoint_epoch_%d' % trained_epoch))
             print(f"Save current ckpt to {ckpt_name}")
             save_checkpoint(checkpoint_state(model, epoch=trained_epoch), filename=ckpt_name)
 

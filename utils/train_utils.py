@@ -2,6 +2,7 @@ import glob
 import os
 
 import torch
+import torch.nn.functional as F
 import time
 
 
@@ -35,3 +36,29 @@ def save_checkpoint(state, filename='checkpoint'):
 
     filename = '{}.pth'.format(filename)
     torch.save(state, filename)
+
+
+def adjust_learning_rate(optimizer, epoch, lr, scaler, writer):
+    """Sets the learning rate to the initial LR decayed by half by every 5 or 10 epochs"""
+    if epoch > 0:
+        if epoch <= 30:
+            lr = lr * scaler * (0.5 ** (epoch // 5))
+        else:
+            lr = lr * scaler * (0.5 ** (epoch // 10))
+        for param_group in optimizer.param_groups:
+            param_group['lr'] = lr
+        writer.add_scalar('lr_dis', lr, epoch)
+
+
+def discrepancy(out1, out2):
+    """discrepancy loss"""
+    out = torch.mean(torch.abs(F.softmax(out1, dim=-1) - F.softmax(out2, dim=-1)))
+    return out
+
+
+def make_variable(tensor, volatile=False):
+    from torch.autograd import Variable
+    """Convert Tensor to Variable."""
+    if torch.cuda.is_available():
+        tensor = tensor.cuda()
+    return Variable(tensor, volatile=volatile)
