@@ -217,12 +217,12 @@ class UnifiedPointDG(data.Dataset):
         return self.pts.shape[0]
 
 
-def create_splitted_dataset(dataset_type, status="train", config=None):
+def create_splitted_dataset(dataset_type, status="train", config=None, logger=None):
     dataset_list = ["scannet", "shapenet", "modelnet"]
     assert dataset_type in dataset_list, f"Not supported dataset {dataset_type}!"
 
     dataset_spliter = split_dataset(
-        dataset_type, status=status, split_config=config)
+        dataset_type, status=status, logger=logger, split_config=config)
 
     dataset_subsets = []
     for subset in dataset_spliter.keys():

@@ -8,60 +8,43 @@ from data.dataloader import create_single_dataset
 
 import time
 import os
-import argparse
-from copy import copy
+import copy
+import datetime
+
 from tensorboardX import SummaryWriter
-from utils.train_utils import save_checkpoint, checkpoint_state
 from utils.eval_utils import eval_worker
+from utils.train_utils import save_checkpoint, checkpoint_state, adjust_learning_rate, discrepancy
+from utils.common_utils import create_logger, exp_log_folder_creator
+from utils.config import parser_config, log_config_to_file
 
-
-# Command setting
-parser = argparse.ArgumentParser(description='Main')
-parser.add_argument('-source', '-s', type=str, help='source dataset', default='scannet')
-parser.add_argument('-target1', '-t1', type=str, help='target dataset', default='modelnet')
-parser.add_argument('-target2', '-t2', type=str, help='target dataset', default='shapenet')
-parser.add_argument('-batchsize', '-b', type=int, help='batch size', default=64)
-parser.add_argument('-gpu', '-g', type=str, help='cuda id', default='0')
-parser.add_argument('-epochs', '-e', type=int, help='training epoch', default=200)
-parser.add_argument('-lr', type=float, help='learning rate', default=0.001)
-parser.add_argument('-datadir', type=str, help='directory of data', default='/repository/yhx/')
-parser.add_argument('-tb_log_dir', type=str, help='directory of tb', default='./logs/src_m_s_ss')
-parser.add_argument('--ckpt_save_interval', type=int, default=5, help='number of training epochs')
-parser.add_argument('--max_ckpt_save_num', type=int, default=50, help='max number of saved checkpoint')
-args = parser.parse_args()
-
-if not os.path.exists(os.path.join(os.getcwd(), args.tb_log_dir)):
-    os.makedirs(os.path.join(os.getcwd(), args.tb_log_dir))
-writer = SummaryWriter(log_dir=args.tb_log_dir)
-
-device = 'cuda'
-os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
-
-BATCH_SIZE = args.batchsize * len(args.gpu.split(','))
-LR = args.lr
-weight_decay = 5e-4
-momentum = 0.9
-max_epoch = args.epochs
-num_class = 10
-if 'data' not in args.datadir:
-    dir_root = os.path.join(args.datadir, 'PointDA_data/')
-else:
-    dir_root = args.datadir
-
-output_dir = os.path.join(dir_root , 'output')
-ckpt_dir = os.path.join(output_dir , 'ckpt', 'source_train', args.source)
-if not os.path.exists(output_dir): os.makedirs(output_dir) 
-if not os.path.exists(ckpt_dir): os.makedirs(ckpt_dir) 
 
 def main():
-    print ('Start Training\nInitiliazing\n')
-    print('The source domain is set to:', args.source)
+    args, cfg = parser_config()
+
+    device = 'cuda'
+    os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
+    BATCH_SIZE = args.batchsize * len(args.gpu.split(','))
+
+    output_dir, ckpt_dir = exp_log_folder_creator(cfg, extra_tag=args.source)
+    log_name = 'log_train_source%s.txt' % datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+    log_file = os.path.join(output_dir, log_name)
+    logger = create_logger(log_file=log_file)
+
+    logger.info('**********************Start logging**********************')
+    if not os.path.exists(os.path.join(output_dir, 'tensorboard')):
+        os.makedirs(os.path.join(output_dir,'tensorboard'))
+    writer = SummaryWriter(log_dir=str(os.path.join(output_dir,'tensorboard')))
+
+    for key, val in vars(args).items():
+        logger.info('{:16} {}'.format(key, val))
+    log_config_to_file(cfg, logger=logger)
+
+    logger.info('Start Training\nInitiliazing\n')
+    logger.info(f'The source domain is set to: {args.source}')
 
     dataset_list = ["scannet", "shapenet", "modelnet"]
     test_datasets = list(set(dataset_list) - {args.source})
-    print('The datasets used for testing:', test_datasets)
-
-    data_func={'modelnet': Modelnet40_data, 'scannet': Scannet_data_h5, 'shapenet': Shapenet_data}
+    logger.info(f'The datasets used for testing: {test_datasets}')
 
     source_train_dataset = create_single_dataset(dataset_type=args.source,status="train", aug=True)
     source_test_dataset = create_single_dataset(dataset_type=args.source,status="test", aug=False)
@@ -80,12 +63,11 @@ def main():
     performance_test_sets = {"source": source_test_dataloader, "test1": target_test_dataloader1,
                              "test2": target_test_dataloader2}
 
-    print('num_source_train: {:d}, num_source_test: {:d}, num_target_test1: {:d}, num_target_test2: {:d}'.format(
+    logger.info('num_source_train: {:d}, num_source_test: {:d}, num_target_test1: {:d}, num_target_test2: {:d}'.format(
         num_source_train, num_source_test, num_target_test1, num_target_test2))
-    print('batch_size:', BATCH_SIZE)
+    logger.info(f'batch_size: {BATCH_SIZE}')
 
     # Model
-
     model = Pointnet_cls()
     model = model.to(device=device)
     criterion = nn.CrossEntropyLoss()
@@ -93,14 +75,20 @@ def main():
 
     # Optimizer
     remain_epoch=50
+    max_epoch_num = cfg["OPTIMIZATION"]["NUM_EPOCHES"]
+    LR = cfg["OPTIMIZATION"]["LR"]
+    weight_decay = cfg["OPTIMIZATION"]["WEIGHT_DECAY"]
 
     optimizer = optim.Adam(model.parameters(), lr=LR, weight_decay=weight_decay)
-    lr_schedule = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs+remain_epoch)
+    lr_schedule = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max_epoch_num+remain_epoch)
     # lr_schedule = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.7)
 
-    best_test_acc = {"source": 0, "test1": 0, "test2": 0}
+    best_test_acc = {"source": [0, 0], "test1":[0, 0], "test2":[0, 0]}
+    dataset_remapping = {"source":args.source, "test1": test_datasets[0],
+                             "test2": test_datasets[1]}
+    # best_target_acc_epoch + best_target_acc
 
-    for epoch in range(max_epoch):
+    for epoch in range(max_epoch_num):
         lr_schedule.step(epoch=epoch)
         print(lr_schedule.get_lr())
         writer.add_scalar('lr', lr_schedule.get_lr(), epoch)
@@ -138,7 +126,7 @@ def main():
                     os.remove(ckpt_list[cur_file_idx])
 
             ckpt_name = os.path.join(ckpt_dir , ('checkpoint_epoch_%d' % trained_epoch) )
-            print(f"Save current ckpt to {ckpt_name}")
+            logger.info(f"Save current ckpt to {ckpt_name}")
             save_checkpoint(checkpoint_state(model, epoch=trained_epoch), filename=ckpt_name)
 
         with torch.no_grad():
@@ -149,13 +137,16 @@ def main():
                     "model": copy.deepcopy(model),
                     "dataloader": performance_test_sets[eval_dataset],
                     "dataset": eval_dataset,
-                    "best_target_acc": best_test_acc[eval_dataset],
+                    "best_target_acc": best_test_acc[eval_dataset][1],
                     "device": device,
                     "criterion": criterion,
-                    "epoch": epoch
+                    "epoch": epoch,
+                    "best_target_acc_epoch": best_test_acc[eval_dataset][0],
+                    "dataset_name": dataset_remapping[eval_dataset]
                 }
-                eval_result = eval_worker(eval_dict)
-                best_test_acc[eval_dataset] = eval_result["best_target_acc"]
+                eval_result = eval_worker(eval_dict, logger)
+                best_test_acc[eval_dataset][1] = eval_result["best_target_acc"]
+                best_test_acc[eval_dataset][0] = eval_result["best_target_acc_epoch"]
                 writer_item = 'acc/' + eval_result["dataset"] + "_test_acc"
                 writer.add_scalar(writer_item, eval_result["best_target_acc"], epoch)
             

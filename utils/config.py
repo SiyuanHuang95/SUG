@@ -1,8 +1,32 @@
 from pathlib import Path
 from easydict import EasyDict
-
+import argparse
 import yaml
 
+
+cfg = EasyDict()
+cfg.LOCAL_RANK = 0
+
+def parser_config():
+    parser = argparse.ArgumentParser(description='Arg parser')
+    # basic parameter for training
+    parser.add_argument('--cfg', type=str, default=None, help='specify the config for training')
+    parser.add_argument('--source', '-s', type=str, help='source dataset', default='scannet')
+    parser.add_argument('--batchsize', '-b', type=int, help='batch size', default=64)
+    parser.add_argument('--epochs', '-e', type=int, help='training epoch', default=200)
+    parser.add_argument('--gpu', '-g', type=str, help='cuda id', default='0')
+
+    # basic paramter for cpkt-related
+    parser.add_argument('--pretrained_model', type=str, default=None, help='pretrained_model')
+    parser.add_argument('--ckpt_save_interval', type=int, default=5, help='number of training epochs')
+    parser.add_argument('--max_ckpt_save_num', type=int, default=50, help='max number of saved checkpoint')
+    args = parser.parse_args()
+    
+    cfg_from_yaml_file(args.cfg, cfg)
+    cfg.TAG = Path(args.cfg).stem
+    cfg.EXP_GROUP_PATH = '/'.join(args.cfg.split('/')[1:-1])  # remove 'cfgs' and 'xxxx.yaml'
+
+    return args, cfg
 
 def log_config_to_file(cfg, pre='cfg', logger=None):
     for key, val in cfg.items():
@@ -43,8 +67,3 @@ def cfg_from_yaml_file(cfg_file, config):
         merge_new_config(config=config, new_config=new_config)
 
     return config
-
-
-cfg = EasyDict()
-cfg.ROOT_DIR = (Path(__file__).resolve().parent / '../').resolve()
-cfg.LOCAL_RANK = 0

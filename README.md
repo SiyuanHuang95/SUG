@@ -2,13 +2,7 @@
 
 ## TODO List
 
-[X] Give the acc report on the another dataset
-
-[ ] Set the data path with config
-
-[x] Add config parse
-
-[x] should bind the volume of logs/ with local host 
+[ ] Meta-Learning Framework
 
 ## Requirements
 

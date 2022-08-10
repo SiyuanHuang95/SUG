@@ -9,15 +9,7 @@ data_root = "/point_dg/data"
 # data_root = "/data/point_cloud_classification/PointDA_data"
 
 
-def split_dataset(dataset_type, split_config=None, status='train'):
-    if split_config is None:
-        split_config = {
-            "split_method": "random",
-            "subset_fullsize": True,
-            "sample_rate": 0.5,
-            "train_base": 0
-        }
-
+def split_dataset(dataset_type, split_config, logger, status='train'):
     dataset_path = os.path.join(data_root, dataset_type)
     full_pts, full_label = include_dataset_full_information(
         dataset_type, status=status)
@@ -25,38 +17,41 @@ def split_dataset(dataset_type, split_config=None, status='train'):
 
     dataset_spliter = {}
     index_subset_1, index_subset_2 = None, None
-    subset_2_size = 1 if split_config["subset_fullsize"] else 0.5
-    size_usage = split_config["sample_rate"] + subset_2_size
+    subset_2_size = 1 if split_config["SUBSET_FULLSIZE"] else 0.5
+    size_usage = split_config["SAMPLE_RATE"] + subset_2_size
     # index_config_naming = str(datetime.datetime.now()) + split_config["split_method"] + "_" + str(
     #     split_config["sample_rate"]) + ".pkl"
-    index_config_naming = "size_" + str(size_usage) + split_config["split_method"] + "_" + str(split_config["sample_rate"]) + ".pkl"
+    index_config_naming = "size_" + str(size_usage) + split_config["METHOD"] + "_" + str(split_config["SAMPLE_RATE"]) + ".pkl"
     index_file_storage = os.path.join(dataset_path, index_config_naming)
     if os.path.exists(index_file_storage):
-        print(f"Direct load the indexing history from {index_file_storage}")
+        logger.info(f"Direct load the indexing history from {index_file_storage}")
         with open(index_file_storage, "rb") as f:
             indexs = pickle.load(f)
             index_subset_1 = indexs['index1']
             index_subset_2 = indexs['index2']
 
     if index_subset_1 is None:
-        if split_config["split_method"] == "random":
+        if split_config["METHOD"] == "Random":
             dataset_size = full_pts.shape[0]
             index_array = np.arange(dataset_size)
 
-            subset_size = int(dataset_size * split_config["sample_rate"])
+            subset_size = int(dataset_size * split_config["SAMPLE_RATE"])
             index_subset_1 = np.random.choice(
                 index_array, replace=False, size=subset_size)
 
-            if not split_config["subset_fullsize"]:
+            if not split_config["SUBSET_FULLSIZE"]:
                 index_subset_2 = np.setdiff1d(index_array, index_subset_1)
             else:
                 index_subset_2 = index_array
 
             indexs = {'index2': index_subset_2, "index1": index_subset_1}
+        
+        else:
+            raise NotImplementedError("Not Implemented Error")
 
         with open(index_file_storage, "wb") as f:
             pickle.dump(indexs, f)
-        print(f"Save indexing history to {index_file_storage}")
+        logger.info(f"Save indexing history to {index_file_storage}")
 
     dataset_spliter = {
         "subset_1": {

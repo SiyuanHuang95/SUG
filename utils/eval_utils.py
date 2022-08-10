@@ -1,7 +1,7 @@
 import torch
 
 
-def eval_worker(eval_dict):
+def eval_worker(eval_dict, logger):
     model = eval_dict["model"]
     dataloader = eval_dict["dataloader"]
     best_target_acc = eval_dict["best_target_acc"]
@@ -9,7 +9,8 @@ def eval_worker(eval_dict):
     device = eval_dict["device"]
     criterion = eval_dict["criterion"]
     epoch = eval_dict["epoch"]
-    print(f"Current eval on: {dataset}")
+    best_target_acc_epoch = eval_dict["best_target_acc_epoch"]
+    logger.info(f"Current eval on: {dataset} {eval_dict['dataset_name']}")
     loss_total = 0
     correct_total = 0
     data_total = 0
@@ -34,12 +35,13 @@ def eval_worker(eval_dict):
 
     if pred_acc > best_target_acc:
         best_target_acc = pred_acc
-    print('On dataset {} :{} [overall_acc: {:.4f} \t loss: {:.4f} \t Best Target Acc: {:.4f}]'.format(
-        dataset, epoch, pred_acc, pred_loss, best_target_acc))
+        best_target_acc_epoch = epoch
+    logger.info(f'On dataset {dataset} :{epoch} [overall_acc: {pred_acc} Best Tar Acc: {best_target_acc} on {best_target_acc_epoch}]')
 
     result = {
         "dataset": dataset,
         "epoch": epoch,
-        "best_target_acc": best_target_acc
+        "best_target_acc": best_target_acc,
+        "best_target_acc_epoch": best_target_acc_epoch
     }
     return result
