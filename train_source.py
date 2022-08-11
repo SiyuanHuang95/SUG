@@ -131,7 +131,6 @@ def main():
 
         with torch.no_grad():
             model.eval()
-
             for eval_dataset in performance_test_sets.keys():
                 eval_dict = {
                     "model": copy.deepcopy(model),
@@ -142,7 +141,9 @@ def main():
                     "criterion": criterion,
                     "epoch": epoch,
                     "best_target_acc_epoch": best_test_acc[eval_dataset][0],
-                    "dataset_name": dataset_remapping[eval_dataset]
+                    "dataset_name": dataset_remapping[eval_dataset],
+                    "num_class": cfg["DATASET"]["NUM_CLASS"],
+                    "source_flag": True
                 }
                 eval_result = eval_worker(eval_dict, logger)
                 best_test_acc[eval_dataset][1] = eval_result["best_target_acc"]

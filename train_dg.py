@@ -221,7 +221,8 @@ def main():
                     "criterion": criterion,
                     "epoch": epoch,
                     "best_target_acc_epoch": best_test_acc[eval_dataset][0],
-                    "dataset_name": dataset_remapping[eval_dataset]
+                    "dataset_name": dataset_remapping[eval_dataset],
+                    "num_class": cfg["DATASET"]["NUM_CLASS"]
                 }
                 eval_result = eval_worker(eval_dict, logger)
                 best_test_acc[eval_dataset][1] = eval_result["best_target_acc"]
