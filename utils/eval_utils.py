@@ -13,6 +13,8 @@ def eval_worker(eval_dict, logger):
     num_class = eval_dict["num_class"]
     if "source_flag" in eval_dict:
         source_flag = True
+    else:
+        source_flag = False
     logger.info(f"Current eval on: {dataset} {eval_dict['dataset_name']}")
     loss_total = 0
     correct_total = 0

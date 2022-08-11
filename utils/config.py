@@ -20,11 +20,17 @@ def parser_config():
     parser.add_argument('--pretrained_model', type=str, default=None, help='pretrained_model')
     parser.add_argument('--ckpt_save_interval', type=int, default=5, help='number of training epochs')
     parser.add_argument('--max_ckpt_save_num', type=int, default=50, help='max number of saved checkpoint')
+
+    parser.add_argument('--set', dest='set_cfgs', default=None, nargs=argparse.REMAINDER,
+                        help='set extra config keys if needed [Used in last position]')
     args = parser.parse_args()
     
     cfg_from_yaml_file(args.cfg, cfg)
     cfg.TAG = Path(args.cfg).stem
     cfg.EXP_GROUP_PATH = '/'.join(args.cfg.split('/')[1:-1])  # remove 'cfgs' and 'xxxx.yaml'
+
+    if args.set_cfgs is not None:
+        cfg_from_list(args.set_cfgs, cfg)
 
     return args, cfg
 
@@ -67,3 +73,38 @@ def cfg_from_yaml_file(cfg_file, config):
         merge_new_config(config=config, new_config=new_config)
 
     return config
+
+
+def cfg_from_list(cfg_list, config):
+    """Set config keys via list (e.g., from command line)."""
+    from ast import literal_eval
+    assert len(cfg_list) % 2 == 0
+    for k, v in zip(cfg_list[0::2], cfg_list[1::2]):
+        key_list = k.split('.')
+        d = config
+        for subkey in key_list[:-1]:
+            assert subkey in d, 'NotFoundKey: %s' % subkey
+            d = d[subkey]
+        subkey = key_list[-1]
+        assert subkey in d, 'NotFoundKey: %s' % subkey
+        try:
+            value = literal_eval(v)
+        except:
+            value = v
+
+        if type(value) != type(d[subkey]) and isinstance(d[subkey], EasyDict):
+            key_val_list = value.split(',')
+            for src in key_val_list:
+                cur_key, cur_val = src.split(':')
+                val_type = type(d[subkey][cur_key])
+                cur_val = val_type(cur_val)
+                d[subkey][cur_key] = cur_val
+        elif type(value) != type(d[subkey]) and isinstance(d[subkey], list):
+            val_list = value.split(',')
+            for k, x in enumerate(val_list):
+                val_list[k] = type(d[subkey][0])(x)
+            d[subkey] = val_list
+        else:
+            assert type(value) == type(d[subkey]), \
+                'type {} does not match original type {}'.format(type(value), type(d[subkey]))
+            d[subkey] = value
