@@ -5,7 +5,7 @@ import pdb
 import torch
 import numpy as np
 
-from utils.common_utils import create_one_hot_labels
+from utils.common_utils import create_one_hot_labels, get_most_overlapped_element
 
 min_var_est = 1e-8
 sigma_list = [0.01, 0.1, 1, 10, 100]
@@ -19,6 +19,8 @@ def mmd_cal(label_s, feat_s, label_t, feat_t, args:dict):
         return max_hard_mmd(label_s, feat_s, label_t, feat_t)
     elif args["NAME"] == "OFF":
         return mix_rbf_mmd2(feat_s, feat_t, sigma_list)
+    else:
+        raise RuntimeError("Not Supported MMD Method")
 
 
 def soft_mmd(label_s, feat_s, label_t, feat_t, label_weight):
@@ -49,7 +51,13 @@ def max_hard_mmd(label_s, feat_s, label_t, feat_t):
     """
         Try to have max class alignment and reorder the feature vector
     """
-    pass
+    ind_s, ind_t = get_most_overlapped_element(label_s, label_t)
+    assert ind_s.shape == ind_t.shape, "The feature shape mis-matched"
+    selected_feat_node_s = feat_s[ind_s]
+    selected_feat_node_t = feat_t[ind_t]
+    return mix_rbf_mmd2(selected_feat_node_s, selected_feat_node_t, sigma_list)
+
+
 # Consider linear time MMD with a linear kernel:
 # K(f(x), f(y)) = f(x)^Tf(y)
 # h(z_i, z_j) = k(x_i, x_j) + k(y_i, y_j) - k(x_i, y_j) - k(x_j, y_i)

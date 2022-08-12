@@ -33,7 +33,7 @@ def main():
     BATCH_SIZE = args.batchsize * len(args.gpu.split(','))
 
     output_dir, ckpt_dir = exp_log_folder_creator(cfg, extra_tag=args.source)
-    log_name = 'log_train_udg%s.txt' % datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+    log_name = 'log_train_dg%s.txt' % datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
     log_file = os.path.join(output_dir, log_name)
     logger = create_logger(log_file=log_file)
 
@@ -238,7 +238,7 @@ def main():
 
         time_pass_e = time.time() - since_e
         logger.info('The {} epoch takes {:.0f}m {:.0f}s'.format(epoch, time_pass_e // 60, time_pass_e % 60))
-        logger.info('******************Finished One Epoch****************************')
+        logger.info('****************Finished One Epoch****************')
 
 
 if __name__ == '__main__':

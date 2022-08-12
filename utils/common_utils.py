@@ -50,3 +50,33 @@ def create_one_hot_labels(original_labels, num_class=10):
     one_hot_labels = torch.zeros(original_labels.shape[0], num_class)
     one_hot_labels[range(original_labels.shape[0]), original_labels] = 1
     return one_hot_labels
+
+
+def get_most_overlapped_element(vec_a, vec_b, num_class=10):
+    """
+        Get the Overlapped Elements of two class sets
+        vec_a, vec_b: Batch_size * 1, containing the batch labels
+    """
+    sorted_a, indices_a = torch.sort(vec_a)
+    sorted_b, indices_b = torch.sort(vec_b)
+    assert torch.max(sorted_a) < num_class, "The input class is larger than pre-defined"
+    a_pointer = 0
+    b_pointer = 0
+    selecter_a = []
+    selecter_b = []
+    for i in range(num_class):
+        a_i = (sorted_a == i).sum()
+        b_i = (sorted_b == i).sum()
+            
+        selecter_a_i_num = min(a_i, b_i)
+        selecter_a_i = [a_pointer+i for i in range(selecter_a_i_num)]
+        selecter_b_i = [b_pointer+i for i in range(selecter_a_i_num)]
+        a_pointer += a_i
+        b_pointer += b_i
+        selecter_a.extend(selecter_a_i)
+        selecter_b.extend(selecter_b_i)
+    
+    ind_aa = [indices_a[i] for i in selecter_a]
+    ind_bb = [indices_b[i] for i in selecter_b]
+
+    return ind_aa, ind_bb
