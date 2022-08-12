@@ -47,11 +47,11 @@ def main():
     log_config_to_file(cfg, logger=logger)
 
     logger.info('Start Training\nInitiliazing\n')
-    logger.info('The source domain is set to:', args.source)
+    logger.info(f'The source domain is set to: {args.source}')
 
     dataset_list = ["scannet", "shapenet", "modelnet"]
     test_datasets = list(set(dataset_list) - {args.source})
-    logger.info('The datasets used for testing:', test_datasets)
+    logger.info(f'The datasets used for testing: {test_datasets}')
 
     # Data loading
     split_config = cfg["DATASET_SPLITTER"]
@@ -86,7 +86,7 @@ def main():
 
     logger.info(f"Num of source train: {num_source_train}, Num of target train: {num_target_train1}")
     logger.info(f"Num of source test: {num_source_test}, Num of test on {test_datasets[0]} {num_target_test1}, on {test_datasets[-1]} {num_target_test2}")
-    logger.info('batch_size:', BATCH_SIZE)
+    logger.info(f'batch_size: {BATCH_SIZE}')
 
     best_test_acc = {"source": [0, 0], "test1":[0, 0], "test2":[0, 0]}
     # best_target_acc_epoch + best_target_acc
@@ -183,15 +183,9 @@ def main():
             feat_node_s = model(data, node_adaptation_s=True)  # shape: batch_size * 4096
             feat_node_t = model(data_t, node_adaptation_t=True)
             sigma_list = [0.01, 0.1, 1, 10, 100]
-            if cfg["METHODS"]["CLASS_MMD"]:
-                # Only enfore the feature align when the source and target have the same label
-                same_class_index = torch.eq(label, label_t)
-                selected_feat_node_s = feat_node_s[same_class_index]
-                selected_feat_node_t = feat_node_t[same_class_index]
-
-                loss_node_adv = 1 * mmd.mix_rbf_mmd2(selected_feat_node_s, selected_feat_node_t, sigma_list)
-            else:
-                loss_node_adv = 1 * mmd.mix_rbf_mmd2(feat_node_s, feat_node_t, sigma_list)
+            # TODO Add MMD Method:
+            # MAX MMD: use Dynamic Programm to have max class alignment
+            loss_node_adv = 1 * mmd.mmd_cal(label, feat_node_s, label_t, feat_node_t, cfg["METHODS"]["CLASS_MMD"][0])
             
             loss = loss_node_adv
             loss.backward()

@@ -1,22 +1,10 @@
 EXPERIMENT: Source_exp
-EXTRA_TAG: Source_Baseline/
+EXTRA_TAG: Source_Baseline/test3
 DATA_ROOT: /point_dg/data
 LOGS_ROOT: /point_dg/logs
 
 DATASET:
     NUM_CLASS: 10
-
-
-MODEL: MDA
-# alignment model
-
-METHODS:
-    CLASS_MMD: True
-    # Use MMD loss only within same class
-    TARGET_LOSS: 1.0
-    # the weight of target split cls loss
-    SRC_LOSS_WEIGHT: 1.0
-
 
 OPTIMIZATION:
     NUM_EPOCHES: 200

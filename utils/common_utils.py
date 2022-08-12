@@ -1,5 +1,6 @@
 import logging
 import os
+import torch
 
 def create_logger(log_file=None, rank=0, log_level=logging.INFO):
     logger = logging.getLogger(__name__)
@@ -43,3 +44,9 @@ def exp_log_folder_creator(cfg, extra_tag=None):
     if not os.path.exists(output_dir): os.makedirs(output_dir)
     if not os.path.exists(ckpt_dir): os.makedirs(ckpt_dir)
     return output_dir, ckpt_dir
+
+
+def create_one_hot_labels(original_labels, num_class=10):
+    one_hot_labels = torch.zeros(original_labels.shape[0], num_class)
+    one_hot_labels[range(original_labels.shape[0]), original_labels] = 1
+    return one_hot_labels

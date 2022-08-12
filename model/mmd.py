@@ -3,10 +3,53 @@
 
 import pdb
 import torch
+import numpy as np
+
+from utils.common_utils import create_one_hot_labels
 
 min_var_est = 1e-8
+sigma_list = [0.01, 0.1, 1, 10, 100]
+
+def mmd_cal(label_s, feat_s, label_t, feat_t, args:dict):
+    if args["NAME"] == "SOFT_MMD":
+        return soft_mmd(label_s, feat_s, label_t, feat_t, float(args["LABEL_SCALE"]))
+    elif args["NAME"] == "HARD_MMD":
+        return hard_mmd(label_s, feat_s, label_t, feat_t)
+    elif args["NAME"]  == "MAX_HARD_MMD":
+        return max_hard_mmd(label_s, feat_s, label_t, feat_t)
+    elif args["NAME"] == "OFF":
+        return mix_rbf_mmd2(feat_s, feat_t, sigma_list)
 
 
+def soft_mmd(label_s, feat_s, label_t, feat_t, label_weight):
+    """
+        First covert the scalar label to one-hot vector
+        Concat the label vector (batch * 10) to the feat vector (batch *4096)
+    """
+    label_s_one_hot = create_one_hot_labels(label_s).to(device='cuda')
+    label_t_one_hot = create_one_hot_labels(label_t).to(device='cuda')
+    feat_s_label = torch.cat((feat_s, label_s_one_hot * label_weight), dim=1)
+    feat_t_label = torch.cat((feat_t, label_t_one_hot * label_weight), dim=1)
+
+    return mix_rbf_mmd2(feat_s_label, feat_t_label, sigma_list)
+
+
+def hard_mmd(label_s, feat_s, label_t, feat_t):
+    """
+        Direct use torch.eq to calculate the loss when same label occurs
+    """
+    same_class_index = torch.eq(label_s, label_t)
+    selected_feat_node_s = feat_s[same_class_index]
+    selected_feat_node_t = feat_t[same_class_index]
+
+    return mix_rbf_mmd2(selected_feat_node_s, selected_feat_node_t, sigma_list)
+
+
+def max_hard_mmd(label_s, feat_s, label_t, feat_t):
+    """
+        Try to have max class alignment and reorder the feature vector
+    """
+    pass
 # Consider linear time MMD with a linear kernel:
 # K(f(x), f(y)) = f(x)^Tf(y)
 # h(z_i, z_j) = k(x_i, x_j) + k(y_i, y_j) - k(x_i, y_j) - k(x_j, y_i)
