@@ -16,7 +16,7 @@ from utils.eval_utils import eval_worker
 from utils.train_utils import save_checkpoint, checkpoint_state, adjust_learning_rate, discrepancy
 from utils.common_utils import create_logger, exp_log_folder_creator
 from utils.config import parser_config, log_config_to_file
-
+from utils.train_files_spliter import dataset_list
 
 def main():
     args, cfg = parser_config()
@@ -42,7 +42,6 @@ def main():
     logger.info('Start Training\nInitiliazing\n')
     logger.info(f'The source domain is set to: {args.source}')
 
-    dataset_list = ["scannet", "shapenet", "modelnet"]
     test_datasets = list(set(dataset_list) - {args.source})
     logger.info(f'The datasets used for testing: {test_datasets}')
 

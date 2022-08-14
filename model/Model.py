@@ -36,7 +36,7 @@ class GradReverse(torch.autograd.Function):
         return x.view_as(x)
 
     def backward(self, grad_output):
-        return (grad_output * -self.lambd)
+        return grad_output * -self.lambd
 
 
 def grad_reverse(x, lambd=1.0):
@@ -88,7 +88,7 @@ class Pointnet_g(nn.Module):
 
         x = self.bn1(x)
 
-        if node == True:
+        if node:
             return x, node_fea, node_off
         else:
             return x, node_fea

@@ -2,3 +2,5 @@ h5py
 tensorboardX
 matplotlib
 easydict
+numpy
+sklearn

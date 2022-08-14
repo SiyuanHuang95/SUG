@@ -3,10 +3,14 @@ import h5py
 import glob
 import numpy as np
 import pickle
+import random
 import datetime
 
 data_root = "/point_dg/data"
 # data_root = "/data/point_cloud_classification/PointDA_data"
+# data_root = "/home/siyuan/4-data/PointDA_data"
+num_class = 10
+dataset_list = ["scannet", "shapenet", "modelnet"]
 
 
 def split_dataset(dataset_type, split_config, logger, status='train'):
@@ -21,7 +25,8 @@ def split_dataset(dataset_type, split_config, logger, status='train'):
     size_usage = split_config["SAMPLE_RATE"] + subset_2_size
     # index_config_naming = str(datetime.datetime.now()) + split_config["split_method"] + "_" + str(
     #     split_config["sample_rate"]) + ".pkl"
-    index_config_naming = "size_" + str(size_usage) + split_config["METHOD"] + "_" + str(split_config["SAMPLE_RATE"]) + ".pkl"
+    index_config_naming = "size_" + str(size_usage) + split_config["METHOD"] + "_" + str(
+        split_config["SAMPLE_RATE"]) + ".pkl"
     index_file_storage = os.path.join(dataset_path, index_config_naming)
     if os.path.exists(index_file_storage):
         logger.info(f"Direct load the indexing history from {index_file_storage}")
@@ -45,27 +50,29 @@ def split_dataset(dataset_type, split_config, logger, status='train'):
                 index_subset_2 = index_array
 
             indexs = {'index2': index_subset_2, "index1": index_subset_1}
-        
+
+            with open(index_file_storage, "wb") as f:
+                pickle.dump(indexs, f)
+            logger.info(f"Save indexing history to {index_file_storage}")
+
+            dataset_spliter = {
+                "subset_1": {
+                    "pts": full_pts[index_subset_1, :],
+                    "label": full_label[index_subset_1]
+                },
+
+                "subset_2": {
+                    "pts": full_pts[index_subset_2, :],
+                    "label": full_label[index_subset_2]
+                }
+            }
+            return dataset_spliter
+
+        if split_config["METHOD"] == "Cluster":
+            return include_dataset_from_splitter(dataset_type, split_config)
+
         else:
             raise NotImplementedError("Not Implemented Error")
-
-        with open(index_file_storage, "wb") as f:
-            pickle.dump(indexs, f)
-        logger.info(f"Save indexing history to {index_file_storage}")
-
-    dataset_spliter = {
-        "subset_1": {
-            "pts": full_pts[index_subset_1, :],
-            "label": full_label[index_subset_1]
-        },
-
-        "subset_2": {
-            "pts": full_pts[index_subset_2, :],
-            "label": full_label[index_subset_2]
-        }
-    }
-
-    return dataset_spliter
 
 
 def include_dataset_full_information(dataset_type, status='train'):
@@ -78,6 +85,76 @@ def include_dataset_full_information(dataset_type, status='train'):
     label_path = os.path.join(data_root, dataset_type, status + "_label.npy")
     full_label = np.load(label_path)
     return full_pts, full_label
+
+
+def include_dataset_one_class(dataset_type, status='train', cls=0):
+    """
+    Args:
+        dataset_type: scannet/shapenet/modelnet
+        status: train of test
+        cls: 0-9, number
+    Returns: pts and labels of cls in dataset
+    """
+    full_pts, full_labels = include_dataset_full_information(dataset_type, status)
+    index_cls = full_labels == cls
+    return full_pts[index_cls], full_labels[index_cls]
+
+
+def include_dataset_from_splitter(dataset_type, spliter_config, subset_num=2):
+    spliter_path = os.path.join(data_root, dataset_type, "spliter")
+    if not os.path.exists(spliter_path):
+        raise RuntimeError("No Spliter Folder Found, Need to Generate Dataset Cluster First!")
+
+    cluster_num = len(glob.glob(str(spliter_path) + "/1_*.npy"))
+    subset_1_pts, subset_1_labels = [], []
+    subset_2_pts, subset_2_labels = [], []  # could be full-size
+    subset_1_cluster = int(cluster_num * spliter_config["SAMPLE_RATE"])
+    for i in range(num_class):
+        cls_npy_list = glob.glob(str(spliter_path) + "/" + str(i) + "_*.npy")
+        random.shuffle(cls_npy_list)
+        subset_cls_1 = cls_npy_list[0:subset_1_cluster]
+        if spliter_config["SUBSET_FULLSIZE"]:
+            # 50% + 100%
+            subset_cls_2 = cls_npy_list
+        else:
+            subset_cls_2 = cls_npy_list[subset_1_cluster:]
+
+        cls_1_pts, cls_1_labels = load_npy_pts_and_labels(subset_cls_1, cls=i)
+        cls_2_pts, cls_2_labels = load_npy_pts_and_labels(subset_cls_2, cls=i)
+        subset_1_pts.extend(cls_1_pts)
+        subset_1_labels.extend(cls_1_labels)
+        subset_2_pts.extend(cls_2_pts)
+        subset_2_labels.extend(cls_2_labels)
+
+    dataset_spliter = {
+        "subset_1": {
+            "pts": np.array(subset_1_pts),
+            "label": np.array(subset_1_labels)
+        },
+
+        "subset_2": {
+            "pts": np.array(subset_2_pts),
+            "label": np.array(subset_2_labels)
+        }
+    }
+    return dataset_spliter
+
+
+def load_npy_pts_and_labels(npy_list, cls):
+    """
+    Args:
+        npy_list: list store the NPY splitter files
+        cls: current cls index
+
+    Returns:
+        pts and label in list
+    """
+    pts, labels = [], []
+    for npy_file in npy_list:
+        pts.extend(np.load(npy_file))
+    pts = np.array(pts)
+    labels = np.ones(pts.shape[0]) * cls
+    return pts.tolist(), labels.tolist()
 
 
 def extract_scannet_to_npy(scannet_path):
@@ -162,13 +239,14 @@ def rename_npy_files(data_path):
 
 
 if __name__ == "__main__":
-    # rename_npy_files(os.path.join(scannet_path, "plant"))
-    funcs = {
-        "scannet": extract_scannet_to_npy,
-        "shapenet": extract_shapenet_to_npy,
-        "modelnet": extract_modelnet_to_npy
-    }
-    for dataset in ["scannet", "shapenet", "modelnet"]:
-        dataset_path = os.path.join(data_root, dataset)
-        funcs[dataset](dataset_path)
-    # extract_scannet_to_npy(scannet_path)
+    init_dataset = False
+    if init_dataset:
+        # rename_npy_files(os.path.join(scannet_path, "plant"))
+        funcs = {
+            "scannet": extract_scannet_to_npy,
+            "shapenet": extract_shapenet_to_npy,
+            "modelnet": extract_modelnet_to_npy
+        }
+        for dataset in ["scannet", "shapenet", "modelnet"]:
+            dataset_path = os.path.join(data_root, dataset)
+            funcs[dataset](dataset_path)

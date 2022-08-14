@@ -1,0 +1,37 @@
+EXPERIMENT: DG_exp
+EXTRA_TAG: DG_SOFTMMD
+DATA_ROOT: /point_dg/data
+LOGS_ROOT: /point_dg/logs
+
+DATASET:
+    NUM_CLASS: 10
+
+
+MODEL: MDA
+# alignment model
+
+METHODS:
+    CLASS_MMD: 
+        - NAME: SOFT_MMD
+          LABEL_SCALE: 1.0
+    # Use MMD loss only within same class
+    TARGET_LOSS: 1.0
+    # the weight of target split cls loss
+    SRC_LOSS_WEIGHT: 1.0
+
+DATASET_SPLITTER:
+    METHOD: Cluster
+    SUBSET_FULLSIZE: False
+    SAMPLE_RATE: 0.5
+    TRAIN_BASE: 1
+
+
+OPTIMIZATION:
+    NUM_EPOCHES: 200
+
+    LR: 0.0001
+    LR_SCALER: 1.0
+    WEIGHT_DECAY: 0.0005
+    MOMENTUM: 0.9
+    # TODO Do we need to add more optimization parameters like adam_cycle？
+    # or it is not our current main focus

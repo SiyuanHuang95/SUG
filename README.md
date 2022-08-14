@@ -1,6 +1,7 @@
 # Domain Generalization for 3D Point Cloud 
 
 ## TODO List
+[x] Use Pre-trained Model and T-SNE/PCA to cluster dataset
 
 [ ] Meta-Learning Framework
 
