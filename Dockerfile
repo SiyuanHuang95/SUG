@@ -4,19 +4,17 @@ ENV PROJECT=/point_dg
 WORKDIR $PROJECT
 RUN mkdir -p  $PROJECT/logs && mkdir -p $PROJECT/workspace/ && mkdir $PROJECT/data
 
-# Update and install various packages
-RUN apt-get update -q && \
-    apt-get upgrade -yq && \
-    apt-get install -yq wget curl git build-essential vim sudo lsb-release locales bash-completion tzdata
+RUN apt-get update -y  ; exit 0
+# use exit 0 to avoid errors from nvidia-gpg which could cause exit
+RUN apt-get install curl -y  && apt-get install -y --no-install-recommends \
+       build-essential libopenblas-dev git python3-pip \ 
+       &&  apt-get install libsm6 libxrender1 libfontconfig1
 
 # Copy the repo file to docker
-COPY . $PROJECT/workspace
+COPY . $PROJECT/workspace 
+RUN cd $PROJECT/workspace && pip install -r requirements.txt \ 
+        && conda install -n base ipykernel --update-deps --force-reinstall
 # Recommand to pip install after docker built
-# RUN cd $PROJECT/workspace && pip install -r requirements.txt && conda install -n base ipykernel --update-deps --force-reinstall
-
-# RUN python3 -m pip install --editable .
-# Complie the project environment if needed
-# RUN rm -rf $PROJECT
 
 # Add user to share files between container and host system
 ARG USER_ID
