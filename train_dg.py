@@ -182,11 +182,8 @@ def main():
             # Local Alignment
             feat_node_s = model(data, node_adaptation_s=True)  # shape: batch_size * 4096
             feat_node_t = model(data_t, node_adaptation_t=True)
-            sigma_list = [0.01, 0.1, 1, 10, 100]
-            # TODO Add MMD Method:
-            # MAX MMD: use Dynamic Programm to have max class alignment
-            loss_node_adv = 1 * mmd.mmd_cal(label, feat_node_s, label_t, feat_node_t, cfg["METHODS"]["CLASS_MMD"][0])
-            
+
+            loss_node_adv = 1 * mmd.mmd_cal(label, feat_node_s, label_t, feat_node_t, cfg["METHODS"]["CLASS_MMD"][0])           
             loss = loss_node_adv
             loss.backward()
             optimizer_dis.step()
