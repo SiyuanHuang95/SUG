@@ -1,6 +1,14 @@
 import logging
 import os
 import torch
+import numpy as np
+
+
+def check_numpy_to_torch(x):
+    if isinstance(x, np.ndarray):
+        return torch.from_numpy(x).float(), True
+    return x, False
+
 
 def create_logger(log_file=None, rank=0, log_level=logging.INFO):
     logger = logging.getLogger(__name__)
