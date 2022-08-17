@@ -7,8 +7,7 @@ RUN mkdir -p  $PROJECT/logs && mkdir -p $PROJECT/workspace/ && mkdir $PROJECT/da
 RUN apt-get update -y  ; exit 0
 # use exit 0 to avoid errors from nvidia-gpg which could cause exit
 RUN apt-get install curl -y  && apt-get install -y --no-install-recommends \
-       build-essential libopenblas-dev git python3-pip \ 
-       &&  apt-get install libsm6 libxrender1 libfontconfig1
+       build-essential libopenblas-dev git python3-pip  
 
 # Copy the repo file to docker
 COPY . $PROJECT/workspace 
