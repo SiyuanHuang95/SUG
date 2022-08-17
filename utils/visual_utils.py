@@ -20,9 +20,10 @@ def visualize_feature_scatter(features, cls=None, labels_=None, cluster_centers=
                     cluster_center[1],
                     "o",
                     markerfacecolor=col,
-                    markeredgecolor="k",
+                    markeredgecolor=col,
                     markersize=6,
                 )
+                ax.text(x=cluster_center[0], y=cluster_center[1], s=str(k))
             else:
                 ax.scatter3D(features[my_members, 0], features[my_members, 1], features[my_members, 2], c=col)
                 ax.scatter3D(cluster_center[0], cluster_center[1], cluster_center[2], c=col, s=40)

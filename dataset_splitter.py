@@ -1,4 +1,3 @@
-import re
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
@@ -9,6 +8,7 @@ from utils.visual_utils import visualize_feature_scatter
 from utils.common_utils import check_numpy_to_torch
 
 import os
+import shutil
 import torch
 import argparse
 import numpy as np
@@ -24,6 +24,11 @@ def split_dataset_clusters(config):
     dataset_type = config["dataset_type"]
     cluster_num = config["cluster_num"]
     model = config["model"]
+
+    spliter_save_path = os.path.join(data_root, dataset_type, "spliter")
+    if os.path.exists(spliter_save_path):
+        shutil.rmtree(spliter_save_path, ignore_errors=True)
+
     mid_features_numpy, logits_numpy = extract_feature_map_class(pre_trained_, model=model, dataset_type=dataset_type)
     # cluster feature maps within class
     # cluster prediction uncertainity cross class
@@ -33,13 +38,10 @@ def split_dataset_clusters(config):
         cluster_cls = kmeans_clustering(mid_features_numpy[index_cls], dataset_type=dataset_type,cluster_num=cluster_num, cls=i)
         if cluster_cls is None:
             continue
-        spliter_cls_data(pts_all=raw_pts[index_cls], cluster_labels=cluster_cls, cls=i, method="kmeans")
+        spliter_cls_data(pts_all=raw_pts[index_cls], cluster_labels=cluster_cls, cls=i, method="kmeans", dataset_type=dataset_type)
     
-    print(f"Logits num shape : {logits_numpy.shape}")
     cluster_labels = entropy_clustering(logits_numpy, cluster_num=cluster_num)
-    print(f"cluster_labels shape: {cluster_labels.shape} ")
-    spliter_cls_data(pts_all=raw_pts, cluster_labels=cluster_labels, cls=-1, method="entropy")
-
+    spliter_cls_data(pts_all=raw_pts, cluster_labels=cluster_labels, cls=-1, method="entropy", dataset_type=dataset_type, raw_labels=raw_labels)
 
 
 def extract_feature_map_class(pre_trained_, save_path=None, dataset_type="modelnet", cls=-1, model=None):
@@ -76,18 +78,31 @@ def kmeans_clustering(feature_maps, dataset_type, cluster_num=4, cls=-1):
     if not os.path.exists(spliter_save_path):
         os.makedirs(spliter_save_path)
     
-    fig_path = os.path.join(spliter_save_path, str(cls)+"_clsuter.png")
-    if os.path.exists(fig_path):
+    fig_path = os.path.join(spliter_save_path, "kmeans_" + str(cls)+"_clsuter.png")
+    if os.path.exists(fig_path) and False:
         return None
 
     feature_maps_ = reduction_tsne(feature_maps, num_comps=2)
     kmeans_model = KMeans(n_clusters=4, verbose=False).fit(feature_maps_)
 
-    
-    visualize_feature_scatter(feature_maps_, labels_=kmeans_model.labels_,
-                              cluster_centers=kmeans_model.cluster_centers_, cls=cls, file_path=fig_path)
-    return kmeans_model.labels_
+    # should reorder the cluster-idx based on the cluster_centers_ distance
+    labels_, centers_ = kmeans_cluster_idx_update(kmeans_model.labels_, kmeans_model.cluster_centers_)
+    visualize_feature_scatter(feature_maps_, labels_=labels_, cluster_centers=centers_, cls=cls, file_path=fig_path)
+    return labels_
 
+
+def kmeans_cluster_idx_update(labels_, cluster_centers_):
+    new_labels = np.zeros_like(labels_)
+    new_cluster_centers = np.zeros_like(cluster_centers_)
+    anchor_center = cluster_centers_[0]
+    distances = [np.linalg.norm(anchor_center - cluster_center) for cluster_center in cluster_centers_]
+    indices = np.argsort(np.array(distances)).squeeze()
+    for i in range(len(cluster_centers_)):
+        cluster_idx = labels_ == i
+        new_labels[cluster_idx] = indices.tolist().index(i)
+        new_cluster_centers[i] = cluster_centers_[indices[i]]
+    return new_labels, new_cluster_centers
+        
 
 def reduction_tsne(features, num_comps=3, visualize=False):
     tsne = TSNE(n_components=num_comps, init='pca', random_state=0, method='exact', verbose=False)
@@ -127,11 +142,15 @@ def kl_clustering(preds, cluster_num=4):
     return fclusterdata(preds, metric=kl_divergence_distance, criterion='maxclust', t=cluster_num)
 
 
-def spliter_cls_data(pts_all, cluster_labels, cls, method:str, save_path=None):
+def spliter_cls_data(pts_all, cluster_labels, cls, method:str, dataset_type:str, save_path=None, raw_labels=None):
     assert pts_all.shape[0] == cluster_labels.shape[0], "The cluster labels and Pts shape mismatch"
+    if cls == -1 and raw_labels is None:
+        raise RuntimeError("When process all cls, label infos need to be added")
     for k in range(len(set(cluster_labels))):
         cluster_index = cluster_labels == k
         cluster_pts = pts_all[cluster_index, :]
+        if cls == -1:
+            cluster_lbl = raw_labels[cluster_index]
 
         if save_path is None:
             save_path = os.path.join(data_root, dataset_type, "spliter")
@@ -142,10 +161,13 @@ def spliter_cls_data(pts_all, cluster_labels, cls, method:str, save_path=None):
         npy_file = method + "_" + str(cls) + "_" + str(k) + "_" + str(cluster_pts.shape[0]) + ".npy"
         # file name: method + class_idx - cluster_idx - num_pts
         npy_save_path = os.path.join(save_path, npy_file)
-
         np.save(npy_save_path, cluster_pts)
         print(f"Save Class {cls} Cluster {k} with number {cluster_pts.shape[0]} to {npy_save_path}")
 
+        if cls == -1:
+            npy_file = method + "_" + str(cls) + "_" + str(k) + "_" + str(cluster_pts.shape[0]) + "_labels.npy"
+            npy_save_path = os.path.join(save_path, npy_file)
+            np.save(npy_save_path, cluster_lbl)
 
 def init_model(pre_trained_, model=None):
     device = 'cuda'
@@ -178,18 +200,22 @@ if __name__ == "__main__":
     parser.add_argument('--dataset', type=str, default="modelnet")
     parser.add_argument('--process_all', action="store_true", default=False, help="Whether to process all")
     args = parser.parse_args()
-    # pre_trained = "/home/siyuan/4-data/PointDA_data/output/ckpt/source_train/modelnet/checkpoint_epoch_150.pth"
+    # args.pre_trained =  "/point_dg/data/output/Source_Baseline/ckpt/Source_exp/Source_Baseline"
+    # args.process_all = True
+    
     if args.process_all:
         process_list = []
         for dataset_type in dataset_list:
             # when --process_all set, the --pred_trained is the folder contains all ckpt
             ckpt_folder = os.path.join(args.pre_trained, dataset_type)
             cpkt_pth = os.path.join(ckpt_folder, "checkpoint_epoch_150.pth")
+            # cpkt only loads the 150-th epoch,not the best one
             if not os.path.join(cpkt_pth):
                 raise FileNotFoundError("The Pre-Trained Ckpt not found")
             process_list.append({"pre_trained_": cpkt_pth, "dataset_type":dataset_type, "cluster_num":4, "model":None})
         for procss_config in process_list:
             split_dataset_clusters(procss_config)
+            # planned to use multi-process pool here, cuda not allowd...not fixed yet
 
     else:
         config_ = {"pre_trained_": args.pre_trained, "dataset_type":args.dataset, "cluster_num":4, "model":None}

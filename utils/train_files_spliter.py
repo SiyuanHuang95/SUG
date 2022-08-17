@@ -68,8 +68,11 @@ def split_dataset(dataset_type, split_config, logger, status='train'):
             }
             return dataset_spliter
 
-        if split_config["METHOD"] == "Cluster":
-            return include_dataset_from_splitter(dataset_type, split_config)
+        elif split_config["METHOD"] == "Cluster":
+            return include_dataset_from_splitter(dataset_type, split_config, method="kmeans")
+
+        elif split_config["METHOD"] == "Entropy":
+            return include_dataset_from_splitter(dataset_type, split_config, method="entropy")
 
         else:
             raise NotImplementedError("Not Implemented Error")
@@ -100,31 +103,32 @@ def include_dataset_one_class(dataset_type, status='train', cls=0):
     return full_pts[index_cls], full_labels[index_cls]
 
 
-def include_dataset_from_splitter(dataset_type, spliter_config, subset_num=2):
+def include_dataset_from_splitter(dataset_type, spliter_config, subset_num=2, method="kmeans"):
     spliter_path = os.path.join(data_root, dataset_type, "spliter")
     if not os.path.exists(spliter_path):
         raise RuntimeError("No Spliter Folder Found, Need to Generate Dataset Cluster First!")
 
-    cluster_num = len(glob.glob(str(spliter_path) + "/1_*.npy"))
     subset_1_pts, subset_1_labels = [], []
     subset_2_pts, subset_2_labels = [], []  # could be full-size
-    subset_1_cluster = int(cluster_num * spliter_config["SAMPLE_RATE"])
-    for i in range(num_class):
-        cls_npy_list = glob.glob(str(spliter_path) + "/" + str(i) + "_*.npy")
-        random.shuffle(cls_npy_list)
-        subset_cls_1 = cls_npy_list[0:subset_1_cluster]
-        if spliter_config["SUBSET_FULLSIZE"]:
-            # 50% + 100%
-            subset_cls_2 = cls_npy_list
-        else:
-            subset_cls_2 = cls_npy_list[subset_1_cluster:]
+    if method == "kmeans":
+        cluster_num = len(glob.glob(str(spliter_path) + "/" + method + "_1_*.npy"))
+        subset_1_cluster = int(cluster_num * spliter_config["SAMPLE_RATE"])
+        for i in range(num_class):
+            subset_cls_1, subset_cls_2 = load_splitter_npy_list(spliter_path, spliter_config, method, i, "random", subset_1_cluster)
 
-        cls_1_pts, cls_1_labels = load_npy_pts_and_labels(subset_cls_1, cls=i)
-        cls_2_pts, cls_2_labels = load_npy_pts_and_labels(subset_cls_2, cls=i)
-        subset_1_pts.extend(cls_1_pts)
-        subset_1_labels.extend(cls_1_labels)
-        subset_2_pts.extend(cls_2_pts)
-        subset_2_labels.extend(cls_2_labels)
+            cls_1_pts, cls_1_labels = load_npy_pts_and_labels(subset_cls_1, cls=i)
+            cls_2_pts, cls_2_labels = load_npy_pts_and_labels(subset_cls_2, cls=i)
+            subset_1_pts.extend(cls_1_pts)
+            subset_1_labels.extend(cls_1_labels)
+            subset_2_pts.extend(cls_2_pts)
+            subset_2_labels.extend(cls_2_labels)
+    elif method == "entropy":
+        cluster_num = len(glob.glob(str(spliter_path) + "/" + method + "_-1_*.npy"))
+        subset_1_cluster = int(cluster_num * spliter_config["SAMPLE_RATE"])
+        choice_list = [[0, 1], [2, 3]]
+        subset_cls_1, subset_cls_2 = load_splitter_npy_list(spliter_path, spliter_config, method, cls=-1, choice_list=choice_list, choice_method=choice_list)
+        subset_1_pts, subset_1_labels = load_npy_pts_and_labels(subset_cls_1, cls=-1)
+        subset_2_pts, subset_2_labels = load_npy_pts_and_labels(subset_cls_2, cls=-1)
 
     dataset_spliter = {
         "subset_1": {
@@ -140,6 +144,27 @@ def include_dataset_from_splitter(dataset_type, spliter_config, subset_num=2):
     return dataset_spliter
 
 
+def load_splitter_npy_list(path, spliter_config, method="kmeans", cls=-1, \
+                            choice_method="random", subset_1_cluster=2, choice_list=None):
+    cls_npy_list = glob.glob(str(path) + "/" + method + "_" + str(cls) + "_*.npy")
+    cls_npy_list = [npy for npy in cls_npy_list if "_label" not in npy]
+    if choice_method == "random":
+        random.shuffle(cls_npy_list)
+        subset_cls_1 = cls_npy_list[0:subset_1_cluster]
+        if spliter_config["SUBSET_FULLSIZE"]:
+            # 50% + 100%
+            subset_cls_2 = cls_npy_list
+        else:
+            subset_cls_2 = cls_npy_list[subset_1_cluster:]
+    else:
+        if choice_list is None:
+            raise RuntimeError("When not random, should set the choice list")
+        subset_cls_1 = [cls_npy_list[i] for i in choice_list[0]]
+        subset_cls_2 = [cls_npy_list[i] for i in choice_list[1]]
+    return subset_cls_1, subset_cls_2
+    
+
+
 def load_npy_pts_and_labels(npy_list, cls):
     """
     Args:
@@ -150,12 +175,20 @@ def load_npy_pts_and_labels(npy_list, cls):
         pts and label in list
     """
     pts, labels = [], []
-    for npy_file in npy_list:
-        pts.extend(np.load(npy_file))
-    pts = np.array(pts)
-    labels = np.ones(pts.shape[0]) * cls
-    return pts.tolist(), labels.tolist()
+    pts = np.array(load_npy_list(npy_list))
+    if cls != -1:
+        labels = (np.ones(pts.shape[0]) * cls).tolist()
+    else:
+        label_file = [file.split(".npy")[0] + "_labels.npy" for file in npy_list]
+        labels = load_npy_list(label_file)
+    return pts.tolist(), labels
 
+
+def load_npy_list(npy_list):
+    infos = []
+    for npy_file in npy_list:
+        infos.extend(np.load(npy_file))
+    return infos
 
 def extract_scannet_to_npy(scannet_path):
     for split_set in ["train", "test"]:
