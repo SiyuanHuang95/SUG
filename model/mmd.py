@@ -51,7 +51,7 @@ def max_hard_mmd(label_s, feat_s, label_t, feat_t):
     """
         Try to have max class alignment and reorder the feature vector
     """
-    ind_s, ind_t = get_most_overlapped_element(label_s, label_t)
+    ind_s, ind_t = get_most_overlapped_element(label_s.cpu(), label_t.cpu())
     assert len(ind_s) == len(ind_t), "The feature shape mis-matched"
     selected_feat_node_s = feat_s[ind_s]
     selected_feat_node_t = feat_t[ind_t]

@@ -84,7 +84,7 @@ def get_most_overlapped_element(vec_a, vec_b, num_class=10):
         selecter_a.extend(selecter_a_i)
         selecter_b.extend(selecter_b_i)
     
-    ind_aa = [indices_a[i] for i in selecter_a]
-    ind_bb = [indices_b[i] for i in selecter_b]
+    ind_aa = [int(indices_a[i]) for i in selecter_a]
+    ind_bb = [int(indices_b[i]) for i in selecter_b]
 
     return ind_aa, ind_bb
