@@ -5,7 +5,6 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from model.model_pointnet import Pointnet_cls as Pointnet_cls
 import model.Model as mM
-from data.dataloader import create_splitted_dataset, create_single_dataset
 import time
 import os
 import glob
@@ -17,9 +16,11 @@ import warnings
 import datetime
 import copy
 from utils.eval_utils import eval_worker
-from utils.train_utils import save_checkpoint, checkpoint_state, adjust_learning_rate, discrepancy
+from utils.train_utils import save_checkpoint, checkpoint_state, adjust_learning_rate, discrepancy, Sampler
 from utils.common_utils import create_logger, exp_log_folder_creator
 from utils.config import parser_config, log_config_to_file
+from data.dataloader import create_splitted_dataset, create_single_dataset
+
 
 from tensorboardX import SummaryWriter
 
@@ -70,10 +71,16 @@ def main():
     num_target_test1 = len(target_test_dataset1)
     num_target_test2 = len(target_test_dataset2)
 
-    source_train_dataloader = DataLoader(source_train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
-                                         drop_last=True)
-    target_train_dataloader = DataLoader(target_train_dataset1, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
-                                          drop_last=True)
+    if cfg.get("CLASS_BALANCE", False):
+        sampler_1 = Sampler(source_train_dataset.classes(), class_per_batch=10, batch_size=BATCH_SIZE)
+        sampler_2 = Sampler(target_train_dataset1.classes(), class_per_batch=10, batch_size=BATCH_SIZE)
+        source_train_dataloader = DataLoader(source_train_dataset, batch_sampler=sampler_1, num_workers=2)
+        target_train_dataloader = DataLoader(target_train_dataset1, batch_sampler=sampler_2, num_workers=2)
+    else:
+        source_train_dataloader = DataLoader(source_train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
+                                            drop_last=True)
+        target_train_dataloader = DataLoader(target_train_dataset1, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
+                                            drop_last=True)
 
     source_test_dataloader = DataLoader(source_test_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
                                         drop_last=True)

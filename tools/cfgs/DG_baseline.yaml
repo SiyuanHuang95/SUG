@@ -17,6 +17,8 @@ METHODS:
     TARGET_LOSS: 1.0
     # the weight of target split cls loss
     SRC_LOSS_WEIGHT: 1.0
+    CLASS_BALANCE: True
+    # Sample the batch with class-balanced
 
 DATASET_SPLITTER:
     METHOD: Random

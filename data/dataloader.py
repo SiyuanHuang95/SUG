@@ -191,7 +191,15 @@ class UnifiedPointDG(data.Dataset):
         self.pts = pts
         self.labels = labels
 
+        self.class_num = 10
+        self.indices = [[] for _ in range(self.class_num)]
+        for i, label in enumerate(labels):
+            self.indices[label].append(i)
+
         print(f"Create {status} Dataset {dataset_type} with pts {pts.shape[0]}")
+
+    def classes(self):
+        return self.indices
 
     def __getitem__(self, index):
         raw_pts = self.pts[index][:, :3]  # for ScanNet, only x-y-z features are used

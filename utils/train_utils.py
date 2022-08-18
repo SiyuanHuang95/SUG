@@ -1,9 +1,7 @@
-import glob
-import os
+import random
 
 import torch
 import torch.nn.functional as F
-import time
 
 
 def model_state_to_cpu(model_state):
@@ -62,3 +60,23 @@ def make_variable(tensor, volatile=False):
     if torch.cuda.is_available():
         tensor = tensor.cuda()
     return Variable(tensor, volatile=volatile)
+
+
+class Sampler():
+    def __init__(self, classes, class_per_batch, batch_size):
+        self.classes = classes
+        self.n_batches = sum([len(x) for x in classes]) // batch_size
+        self.class_per_batch = class_per_batch
+        self.batch_size = batch_size
+
+    def __iter__(self):
+        classes = random.sample(range(len(self.classes)), self.class_per_batch)
+        
+        batches = []
+        for _ in range(self.n_batches):
+            batch = []
+            for i in range(self.batch_size):
+                klass = random.choice(classes)
+                batch.append(random.choice(self.classes[klass]))
+            batches.append(batch)
+        return iter(batches)
