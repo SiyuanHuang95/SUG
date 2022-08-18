@@ -110,7 +110,7 @@ def include_dataset_from_splitter(dataset_type, spliter_config, subset_num=2, me
 
     subset_1_pts, subset_1_labels = [], []
     subset_2_pts, subset_2_labels = [], []  # could be full-size
-    if method == "kmeans":
+    if "kmeans" in method:
         cluster_num = len(glob.glob(str(spliter_path) + "/" + method + "_1_*.npy"))
         subset_1_cluster = int(cluster_num * spliter_config["SAMPLE_RATE"])
         for i in range(num_class):
@@ -179,7 +179,7 @@ def load_npy_pts_and_labels(npy_list, cls):
     if cls != -1:
         labels = (np.ones(pts.shape[0]) * cls).tolist()
     else:
-        label_file = [file.split(".npy")[0] + "_labels.npy" for file in npy_list]
+        label_file = [file.split("_entropy")[0] + "_labels.npy" for file in npy_list]
         labels = load_npy_list(label_file)
     return pts.tolist(), labels
 

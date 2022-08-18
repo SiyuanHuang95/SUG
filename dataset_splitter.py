@@ -10,6 +10,8 @@ from utils.common_utils import check_numpy_to_torch
 import os
 import shutil
 import torch
+import torch.nn.functional as F
+
 import argparse
 import numpy as np
 from torch.utils.data import DataLoader
@@ -33,15 +35,20 @@ def split_dataset_clusters(config):
     # cluster feature maps within class
     # cluster prediction uncertainity cross class
     raw_pts, raw_labels = init_dataloader(dataset_type=dataset_type, get_raw_data=True)
+    probs_numpy = F.softmax(torch.from_numpy(logits_numpy), dim=1).numpy()
+    cluster_labels_entropy, entropys = entropy_clustering(probs_numpy, cluster_num=cluster_num)
     for i in range(num_class):
         index_cls = raw_labels == i
+        entropys_cls = entropys[index_cls]
         cluster_cls = kmeans_clustering(mid_features_numpy[index_cls], dataset_type=dataset_type,cluster_num=cluster_num, cls=i)
         if cluster_cls is None:
+        # adjust the cluster number
+        # ref:https://www.jianshu.com/p/0e74342b9b0b
+        # https://zhuanlan.zhihu.com/p/98918878
             continue
-        spliter_cls_data(pts_all=raw_pts[index_cls], cluster_labels=cluster_cls, cls=i, method="kmeans", dataset_type=dataset_type)
+        spliter_cls_data(pts_all=raw_pts[index_cls], cluster_labels=cluster_cls, cls=i, method="kmeans", dataset_type=dataset_type, cls_entropy=entropys_cls)
     
-    cluster_labels = entropy_clustering(logits_numpy, cluster_num=cluster_num)
-    spliter_cls_data(pts_all=raw_pts, cluster_labels=cluster_labels, cls=-1, method="entropy", dataset_type=dataset_type, raw_labels=raw_labels)
+    spliter_cls_data(pts_all=raw_pts, cluster_labels=cluster_labels_entropy, cls=-1, method="entropy", dataset_type=dataset_type, raw_labels=raw_labels, cls_entropy=entropys)
 
 
 def extract_feature_map_class(pre_trained_, save_path=None, dataset_type="modelnet", cls=-1, model=None):
@@ -60,7 +67,8 @@ def extract_feature_map_class(pre_trained_, save_path=None, dataset_type="modeln
             data, label = batch_cls
             data = data.to(device=device)
             logits, mid_feature = model(data, adapt=True)  # batch_size * num_cls + batch_size * 1024
-
+            # bugs in original model:logits is not from the softmax, but from the mlp
+            # also, the dim of logist is 40
             mid_features.extend(mid_feature.cpu().detach().numpy().tolist())
             logits_list.extend(logits[:, :num_class].cpu().detach().numpy().tolist())
 
@@ -117,10 +125,7 @@ def entropy_clustering(probs, cluster_num=4):
     """
         Ref: https://github.com/ej0cl6/deep-active-learning/blob/master/query_strategies/entropy_sampling.py
     """
-    EPS = 1e-30
-    probs = check_numpy_to_torch(probs)[0] 
-    log_probs = torch.log(probs+ EPS)
-    uncertainties = (probs*log_probs).sum(1)  # data_size * 1
+    uncertainties = cal_probs2entropy(probs)
     indices = uncertainties.sort()[1]
 
     dataset_size = probs.shape[0]
@@ -131,7 +136,17 @@ def entropy_clustering(probs, cluster_num=4):
         pos=np.where( (indices>=cluster_size * i ) & (indices<cluster_size * (i+1))) 
         cluster_labels[pos] = i
 
-    return cluster_labels
+    return cluster_labels, uncertainties
+
+
+def cal_probs2entropy(probs):
+
+    EPS = 1e-30
+    probs = check_numpy_to_torch(probs)[0] 
+    log_probs = torch.log(probs+ EPS)
+    uncertainties = (probs*log_probs).sum(1)  # data_size * 1
+
+    return uncertainties
 
 
 def kl_divergence_distance(x, y):
@@ -142,13 +157,18 @@ def kl_clustering(preds, cluster_num=4):
     return fclusterdata(preds, metric=kl_divergence_distance, criterion='maxclust', t=cluster_num)
 
 
-def spliter_cls_data(pts_all, cluster_labels, cls, method:str, dataset_type:str, save_path=None, raw_labels=None):
+def spliter_cls_data(pts_all, cluster_labels, cls, method:str, dataset_type:str, save_path=None, raw_labels=None, cls_entropy=None):
     assert pts_all.shape[0] == cluster_labels.shape[0], "The cluster labels and Pts shape mismatch"
     if cls == -1 and raw_labels is None:
         raise RuntimeError("When process all cls, label infos need to be added")
     for k in range(len(set(cluster_labels))):
         cluster_index = cluster_labels == k
         cluster_pts = pts_all[cluster_index, :]
+
+        cluster_entropy = None
+        if cls_entropy is not None:
+            cluster_entropy = cls_entropy[cluster_index].mean().numpy().tolist()
+
         if cls == -1:
             cluster_lbl = raw_labels[cluster_index]
 
@@ -158,7 +178,10 @@ def spliter_cls_data(pts_all, cluster_labels, cls, method:str, dataset_type:str,
         if not os.path.exists(save_path):
             os.makedirs(save_path)
 
-        npy_file = method + "_" + str(cls) + "_" + str(k) + "_" + str(cluster_pts.shape[0]) + ".npy"
+        if cls_entropy is None:
+            npy_file = method + "_" + str(cls) + "_" + str(k) + "_" + str(cluster_pts.shape[0]) + ".npy"
+        else:
+            npy_file = method + "_" + str(cls) + "_" + str(k) + "_" + str(cluster_pts.shape[0]) + "_entropy_" + str(cluster_entropy) + ".npy"
         # file name: method + class_idx - cluster_idx - num_pts
         npy_save_path = os.path.join(save_path, npy_file)
         np.save(npy_save_path, cluster_pts)
@@ -200,8 +223,8 @@ if __name__ == "__main__":
     parser.add_argument('--dataset', type=str, default="modelnet")
     parser.add_argument('--process_all', action="store_true", default=False, help="Whether to process all")
     args = parser.parse_args()
-    # args.pre_trained =  "/point_dg/data/output/Source_Baseline/ckpt/Source_exp/Source_Baseline"
-    # args.process_all = True
+    args.pre_trained =  "/point_dg/data/output/Source_Baseline/ckpt/Source_exp/Source_Baseline"
+    args.process_all = True
     
     if args.process_all:
         process_list = []
