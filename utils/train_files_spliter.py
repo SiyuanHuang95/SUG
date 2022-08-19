@@ -1,4 +1,5 @@
 import os
+from typing import List
 import h5py
 import glob
 import numpy as np
@@ -113,8 +114,11 @@ def include_dataset_from_splitter(dataset_type, spliter_config, subset_num=2, me
     if "kmeans" in method:
         cluster_num = len(glob.glob(str(spliter_path) + "/" + method + "_1_*.npy"))
         subset_1_cluster = int(cluster_num * spliter_config["SAMPLE_RATE"])
+        sample_method = "random"
+        if spliter_config.get("MERGE_CLUSTER_METHOD", None):
+            sample_method = spliter_config["MERGE_CLUSTER_METHOD"]
         for i in range(num_class):
-            subset_cls_1, subset_cls_2 = load_splitter_npy_list(spliter_path, spliter_config, method, i, "random", subset_1_cluster)
+            subset_cls_1, subset_cls_2 = load_splitter_npy_list(spliter_path, spliter_config, method, i, sample_method, subset_1_cluster)
 
             cls_1_pts, cls_1_labels = load_npy_pts_and_labels(subset_cls_1, cls=i)
             cls_2_pts, cls_2_labels = load_npy_pts_and_labels(subset_cls_2, cls=i)
@@ -156,6 +160,15 @@ def load_splitter_npy_list(path, spliter_config, method="kmeans", cls=-1, \
             subset_cls_2 = cls_npy_list
         else:
             subset_cls_2 = cls_npy_list[subset_1_cluster:]
+
+    elif choice_method == "Entropy":
+        sort_with_entropy(cls_list=cls_npy_list)
+        subset_cls_1 = cls_npy_list[0:subset_1_cluster]
+        if spliter_config["SUBSET_FULLSIZE"]:
+            # 50% + 100%
+            subset_cls_2 = cls_npy_list
+        else:
+            subset_cls_2 = cls_npy_list[subset_1_cluster:]
     else:
         if choice_list is None:
             raise RuntimeError("When not random, should set the choice list")
@@ -163,6 +176,11 @@ def load_splitter_npy_list(path, spliter_config, method="kmeans", cls=-1, \
         subset_cls_2 = [cls_npy_list[i] for i in choice_list[1]]
     return subset_cls_1, subset_cls_2
     
+
+def sort_with_entropy(cls_list:List):
+    def get_entropy(file_name):
+        return float(file_name.split("_entropy_")[-1].split(".npy")[0]) 
+    return cls_list.sort(key=get_entropy)
 
 
 def load_npy_pts_and_labels(npy_list, cls):

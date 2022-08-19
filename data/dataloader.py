@@ -194,7 +194,7 @@ class UnifiedPointDG(data.Dataset):
         self.class_num = 10
         self.indices = [[] for _ in range(self.class_num)]
         for i, label in enumerate(labels):
-            self.indices[label].append(i)
+            self.indices[int(label)].append(i)
 
         print(f"Create {status} Dataset {dataset_type} with pts {pts.shape[0]}")
 

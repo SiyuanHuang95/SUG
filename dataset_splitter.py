@@ -30,6 +30,7 @@ def split_dataset_clusters(config):
     spliter_save_path = os.path.join(data_root, dataset_type, "spliter")
     if os.path.exists(spliter_save_path):
         shutil.rmtree(spliter_save_path, ignore_errors=True)
+        print(f"Remove the old folder")
 
     mid_features_numpy, logits_numpy = extract_feature_map_class(pre_trained_, model=model, dataset_type=dataset_type)
     # cluster feature maps within class
@@ -126,15 +127,28 @@ def entropy_clustering(probs, cluster_num=4):
         Ref: https://github.com/ej0cl6/deep-active-learning/blob/master/query_strategies/entropy_sampling.py
     """
     uncertainties = cal_probs2entropy(probs)
-    indices = uncertainties.sort()[1]
-
+    uncertainties = uncertainties.cpu().numpy()
+    indices = np.argsort(uncertainties)
     dataset_size = probs.shape[0]
     cluster_labels = np.ones(dataset_size)
-    cluster_size = int(dataset_size // cluster_num)
 
-    for i in range(cluster_num):
-        pos=np.where( (indices>=cluster_size * i ) & (indices<cluster_size * (i+1))) 
-        cluster_labels[pos] = i
+    cluster_with_hist = True
+    # cluster the entropy with fixed number, could be overlapped
+    # should cluster with the hist
+    if not cluster_with_hist:
+        cluster_size = int(dataset_size // cluster_num)
+        for i in range(cluster_num):
+            pos=np.where( (indices>=cluster_size * i ) & (indices<cluster_size * (i+1))) 
+            cluster_labels[pos] = i
+    
+    else:
+        bins_sample_num = np.histogram(uncertainties, bins=cluster_num)[0]
+        pos_start = 0
+        for i in range(cluster_num):
+            pos_end = bins_sample_num[i]
+            pos=np.where( (indices>= pos_start ) & (indices< pos_end))
+            pos_start = pos_end
+            cluster_labels[pos] = i
 
     return cluster_labels, uncertainties
 
@@ -144,7 +158,7 @@ def cal_probs2entropy(probs):
     EPS = 1e-30
     probs = check_numpy_to_torch(probs)[0] 
     log_probs = torch.log(probs+ EPS)
-    uncertainties = (probs*log_probs).sum(1)  # data_size * 1
+    uncertainties = -(probs*log_probs).sum(1)  # data_size * 1
 
     return uncertainties
 
@@ -167,7 +181,7 @@ def spliter_cls_data(pts_all, cluster_labels, cls, method:str, dataset_type:str,
 
         cluster_entropy = None
         if cls_entropy is not None:
-            cluster_entropy = cls_entropy[cluster_index].mean().numpy().tolist()
+            cluster_entropy = np.median(cls_entropy[cluster_index]).tolist()
 
         if cls == -1:
             cluster_lbl = raw_labels[cluster_index]
