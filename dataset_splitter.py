@@ -140,16 +140,11 @@ def entropy_clustering(probs, cluster_num=4):
         for i in range(cluster_num):
             pos=np.where( (indices>=cluster_size * i ) & (indices<cluster_size * (i+1))) 
             cluster_labels[pos] = i
-    
     else:
-        bins_sample_num = np.histogram(uncertainties, bins=cluster_num)[0]
-        pos_start = 0
+        value_edges = np.histogram(uncertainties, bins=cluster_num)[1]
         for i in range(cluster_num):
-            pos_end = bins_sample_num[i]
-            pos=np.where( (indices>= pos_start ) & (indices< pos_end))
-            pos_start = pos_end
+            pos=np.where( (uncertainties>= value_edges[i] ) & (uncertainties<  value_edges[i+1]))
             cluster_labels[pos] = i
-
     return cluster_labels, uncertainties
 
 

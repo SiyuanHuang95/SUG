@@ -29,7 +29,7 @@ def split_dataset(dataset_type, split_config, logger, status='train'):
     index_config_naming = "size_" + str(size_usage) + split_config["METHOD"] + "_" + str(
         split_config["SAMPLE_RATE"]) + ".pkl"
     index_file_storage = os.path.join(dataset_path, index_config_naming)
-    if os.path.exists(index_file_storage):
+    if os.path.exists(index_file_storage) and False:
         logger.info(f"Direct load the indexing history from {index_file_storage}")
         with open(index_file_storage, "rb") as f:
             indexs = pickle.load(f)
@@ -127,9 +127,16 @@ def include_dataset_from_splitter(dataset_type, spliter_config, subset_num=2, me
             subset_2_pts.extend(cls_2_pts)
             subset_2_labels.extend(cls_2_labels)
     elif method == "entropy":
-        cluster_num = len(glob.glob(str(spliter_path) + "/" + method + "_-1_*.npy"))
-        subset_1_cluster = int(cluster_num * spliter_config["SAMPLE_RATE"])
-        choice_list = [[0, 1], [2, 3]]
+        npy_list = glob.glob(str(spliter_path) + "/" + method + "_-1_*.npy")
+        npy_list = [npy for npy in npy_list if "_label" not in npy]
+        cluster_num = len(npy_list)
+       
+        if cluster_num == 4:
+            choice_list = [[0, 1], [2, 3]]
+        elif cluster_num == 2:
+            choice_list = [[0], [1]]
+        else:
+            raise RuntimeError("The size if entropy cluster is wrong")
         subset_cls_1, subset_cls_2 = load_splitter_npy_list(spliter_path, spliter_config, method, cls=-1, choice_list=choice_list, choice_method=choice_list)
         subset_1_pts, subset_1_labels = load_npy_pts_and_labels(subset_cls_1, cls=-1)
         subset_2_pts, subset_2_labels = load_npy_pts_and_labels(subset_cls_2, cls=-1)
