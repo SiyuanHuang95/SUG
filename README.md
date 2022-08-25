@@ -1,7 +1,21 @@
 # Domain Generalization for 3D Point Cloud 
 
 ## TODO List
-[x] Use Pre-trained Model and T-SNE/PCA to cluster dataset
+[ ] 3D Geometric-aware MMD alignment
+
+    [ ] Use 3D descriptor to split the dataset, like NDT
+    [ ] Register the point cloud before MMD
+    [ ] Concat the feature from naive FE and the feature after register
+
+[ ] Dimain Aligment
+
+    [ ] MMD
+    [ ] Domain discriminator
+
+[ ] Dual Alignment
+
+    [ ] Entropy -> Cluster
+    [ ] Cluster -> Entropy
 
 [ ] Meta-Learning Framework
 
