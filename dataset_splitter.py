@@ -1,3 +1,4 @@
+from glob import glob
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
@@ -6,6 +7,7 @@ from model.model_pointnet import Pointnet_cls
 from utils.train_files_spliter import include_dataset_full_information, include_dataset_one_class, data_root, num_class, dataset_list
 from utils.visual_utils import visualize_feature_scatter
 from utils.common_utils import check_numpy_to_torch
+from data.data_utils import normal_pc, fps
 
 import os
 import shutil
@@ -14,6 +16,7 @@ import torch.nn.functional as F
 
 import argparse
 import numpy as np
+import open3d as o3d
 from torch.utils.data import DataLoader
 from sklearn.manifold import TSNE
 from sklearn.cluster import KMeans
@@ -21,35 +24,95 @@ from scipy.special import kl_div
 from scipy.cluster.hierarchy import fclusterdata
 
 
-def split_dataset_clusters(config):
-    pre_trained_ = config["pre_trained_"]
+def x_min(ele):
+    return np.min(ele[:, 0])
+
+
+def split_dataset_geometric(config):
     dataset_type = config["dataset_type"]
     cluster_num = config["cluster_num"]
-    model = config["model"]
-
-    spliter_save_path = os.path.join(data_root, dataset_type, "spliter")
-    if os.path.exists(spliter_save_path):
-        shutil.rmtree(spliter_save_path, ignore_errors=True)
-        print(f"Remove the old folder")
-
-    mid_features_numpy, logits_numpy = extract_feature_map_class(pre_trained_, model=model, dataset_type=dataset_type)
-    # cluster feature maps within class
-    # cluster prediction uncertainity cross class
+    use_hist = False
+    assert cluster_num == 2, "Geometric Split Only Support 2 clusters"
     raw_pts, raw_labels = init_dataloader(dataset_type=dataset_type, get_raw_data=True)
-    probs_numpy = F.softmax(torch.from_numpy(logits_numpy), dim=1).numpy()
-    cluster_labels_entropy, entropys = entropy_clustering(probs_numpy, cluster_num=cluster_num)
-    for i in range(num_class):
-        index_cls = raw_labels == i
-        entropys_cls = entropys[index_cls]
-        cluster_cls = kmeans_clustering(mid_features_numpy[index_cls], dataset_type=dataset_type,cluster_num=cluster_num, cls=i)
-        if cluster_cls is None:
-        # adjust the cluster number
-        # ref:https://www.jianshu.com/p/0e74342b9b0b
-        # https://zhuanlan.zhihu.com/p/98918878
-            continue
-        spliter_cls_data(pts_all=raw_pts[index_cls], cluster_labels=cluster_cls, cls=i, method="kmeans", dataset_type=dataset_type, cls_entropy=entropys_cls)
-    
-    spliter_cls_data(pts_all=raw_pts, cluster_labels=cluster_labels_entropy, cls=-1, method="entropy", dataset_type=dataset_type, raw_labels=raw_labels, cls_entropy=entropys)
+
+    for cls_index in range(num_class):
+        index_cls = raw_labels == cls_index
+        raw_pts_cls = sorted(raw_pts[index_cls], key=x_min)
+        cls_pts_size = len(raw_pts_cls)
+
+        processed_pts = []
+        for i in range(cls_pts_size):
+            processed_cur = fps(normal_pc(raw_pts_cls[i]), 500)
+            processed_pts.append(processed_cur)
+
+        distance_ =[]
+        spliter_process = True
+
+        cls_cluster_labels = np.ones(cls_pts_size)
+        random_process_cnt = 0
+        while spliter_process:
+            cls_cluster_labels = np.ones(cls_pts_size)
+            anchor_idx = np.random.choice(np.arange(cls_pts_size//4, cls_pts_size//2))
+            for i in range(cls_pts_size):
+                distance_.append(icp_distance(processed_pts[anchor_idx], processed_pts[i]))
+
+            if not use_hist:
+                meidan_distance = np.mean(distance_)
+                pos=np.where(distance_ < meidan_distance)
+            else:
+                edges = np.histogram(distance_, bins=cluster_num)[1]
+                pos=np.where(distance_ < edges[1])
+
+            if np.abs(pos[0].shape[0] - 0.5 * cls_pts_size) < 0.4 * cls_pts_size:
+                spliter_process = False
+                cls_cluster_labels[pos] = 0
+                break
+
+            random_process_cnt += 1
+            distance_.clear()
+            if random_process_cnt >= 5:
+                print(f"!!!For dataset {dataset_type} and cls {cls_index} cannot find suitable split")
+                cls_cluster_labels[pos] = 0
+                break
+                
+        if not use_hist:
+            spliter_cls_data(pts_all=np.array(raw_pts_cls), cluster_labels=cls_cluster_labels, cls=cls_index, method="geometric", dataset_type=dataset_type)
+        else:
+            spliter_cls_data(pts_all=np.array(raw_pts_cls), cluster_labels=cls_cluster_labels, cls=cls_index, method="geo_hist", dataset_type=dataset_type)
+
+
+def split_dataset_clusters(config):
+    if "geomertic" in config:
+        split_dataset_geometric(config)
+    else:
+        pre_trained_ = config["pre_trained_"]
+        dataset_type = config["dataset_type"]
+        cluster_num = config["cluster_num"]
+        model = config["model"]
+
+        spliter_save_path = os.path.join(data_root, dataset_type, "spliter")
+        if os.path.exists(spliter_save_path):
+            shutil.rmtree(spliter_save_path, ignore_errors=True)
+            print(f"Remove the old folder")
+
+        mid_features_numpy, logits_numpy = extract_feature_map_class(pre_trained_, model=model, dataset_type=dataset_type)
+        # cluster feature maps within class
+        # cluster prediction uncertainity cross class
+        raw_pts, raw_labels = init_dataloader(dataset_type=dataset_type, get_raw_data=True)
+        probs_numpy = F.softmax(torch.from_numpy(logits_numpy), dim=1).numpy()
+        cluster_labels_entropy, entropys = entropy_clustering(probs_numpy, cluster_num=cluster_num)
+        for i in range(num_class):
+            index_cls = raw_labels == i
+            entropys_cls = entropys[index_cls]
+            cluster_cls = kmeans_clustering(mid_features_numpy[index_cls], dataset_type=dataset_type,cluster_num=cluster_num, cls=i)
+            if cluster_cls is None:
+            # adjust the cluster number
+            # ref:https://www.jianshu.com/p/0e74342b9b0b
+            # https://zhuanlan.zhihu.com/p/98918878
+                continue
+            spliter_cls_data(pts_all=raw_pts[index_cls], cluster_labels=cluster_cls, cls=i, method="kmeans", dataset_type=dataset_type, cls_entropy=entropys_cls)
+        
+        spliter_cls_data(pts_all=raw_pts, cluster_labels=cluster_labels_entropy, cls=-1, method="entropy", dataset_type=dataset_type, raw_labels=raw_labels, cls_entropy=entropys)
 
 
 def extract_feature_map_class(pre_trained_, save_path=None, dataset_type="modelnet", cls=-1, model=None):
@@ -148,6 +211,20 @@ def entropy_clustering(probs, cluster_num=4):
     return cluster_labels, uncertainties
 
 
+def icp_distance(pts1, pts2):
+    pcd1 = o3d.geometry.PointCloud()
+    pcd1.points = o3d.utility.Vector3dVector(pts1[:, 0:3])
+
+    pcd2 = o3d.geometry.PointCloud()
+    pcd2.points = o3d.utility.Vector3dVector(pts2[:, 0:3])
+
+    result_icp = o3d.pipelines.registration.registration_icp(
+        source=pcd1, target=pcd2, max_correspondence_distance=0.15
+    )
+
+    return 1 - result_icp.fitness
+
+
 def cal_probs2entropy(probs):
 
     EPS = 1e-30
@@ -170,6 +247,18 @@ def spliter_cls_data(pts_all, cluster_labels, cls, method:str, dataset_type:str,
     assert pts_all.shape[0] == cluster_labels.shape[0], "The cluster labels and Pts shape mismatch"
     if cls == -1 and raw_labels is None:
         raise RuntimeError("When process all cls, label infos need to be added")
+    
+    if save_path is None:
+        save_path = os.path.join(data_root, dataset_type, "spliter")
+
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+
+    files = glob(os.path.join(save_path, method+"_"+str(cls)+"*"))
+    for file in files:
+        print(f"remove the old file: {file}")
+        os.remove(file)
+    
     for k in range(len(set(cluster_labels))):
         cluster_index = cluster_labels == k
         cluster_pts = pts_all[cluster_index, :]
@@ -180,13 +269,6 @@ def spliter_cls_data(pts_all, cluster_labels, cls, method:str, dataset_type:str,
 
         if cls == -1:
             cluster_lbl = raw_labels[cluster_index]
-
-        if save_path is None:
-            save_path = os.path.join(data_root, dataset_type, "spliter")
-
-        if not os.path.exists(save_path):
-            os.makedirs(save_path)
-
         if cls_entropy is None:
             npy_file = method + "_" + str(cls) + "_" + str(k) + "_" + str(cluster_pts.shape[0]) + ".npy"
         else:
@@ -200,6 +282,7 @@ def spliter_cls_data(pts_all, cluster_labels, cls, method:str, dataset_type:str,
             npy_file = method + "_" + str(cls) + "_" + str(k) + "_" + str(cluster_pts.shape[0]) + "_labels.npy"
             npy_save_path = os.path.join(save_path, npy_file)
             np.save(npy_save_path, cluster_lbl)
+
 
 def init_model(pre_trained_, model=None):
     device = 'cuda'
@@ -238,13 +321,15 @@ if __name__ == "__main__":
     if args.process_all:
         process_list = []
         for dataset_type in dataset_list:
+            # if dataset_type != "modelnet":
+            #     continue
             # when --process_all set, the --pred_trained is the folder contains all ckpt
             ckpt_folder = os.path.join(args.pre_trained, dataset_type)
             cpkt_pth = os.path.join(ckpt_folder, "checkpoint_epoch_150.pth")
             # cpkt only loads the 150-th epoch,not the best one
             if not os.path.join(cpkt_pth):
                 raise FileNotFoundError("The Pre-Trained Ckpt not found")
-            process_list.append({"pre_trained_": cpkt_pth, "dataset_type":dataset_type, "cluster_num":4, "model":None})
+            process_list.append({"pre_trained_": cpkt_pth, "dataset_type":dataset_type, "cluster_num":2, "model":None, "geomertic": True})
         for procss_config in process_list:
             split_dataset_clusters(procss_config)
             # planned to use multi-process pool here, cuda not allowd...not fixed yet

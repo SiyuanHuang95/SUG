@@ -204,6 +204,7 @@ class UnifiedPointDG(data.Dataset):
     def __getitem__(self, index):
         raw_pts = self.pts[index][:, :3]  # for ScanNet, only x-y-z features are used
         label = self.labels[index]
+        # TODO should do normal once, to speed-up the whole process
         pts = normal_pc(raw_pts)
 
         if self.aug:

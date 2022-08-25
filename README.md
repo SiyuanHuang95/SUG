@@ -3,7 +3,7 @@
 ## TODO List
 [ ] 3D Geometric-aware MMD alignment
 
-    [ ] Use 3D descriptor to split the dataset, like NDT
+    [X] Use 3D descriptor to split the dataset, like ICP
     [ ] Register the point cloud before MMD
     [ ] Concat the feature from naive FE and the feature after register
 

@@ -75,6 +75,11 @@ def split_dataset(dataset_type, split_config, logger, status='train'):
         elif split_config["METHOD"] == "Entropy":
             return include_dataset_from_splitter(dataset_type, split_config, method="entropy")
 
+        elif split_config["METHOD"] == "Geo_hist":
+            return include_dataset_from_splitter(dataset_type, split_config, method="geo_hist")
+
+        elif split_config["METHOD"] == "Geometric":
+            return include_dataset_from_splitter(dataset_type, split_config, method="geometric")
         else:
             raise NotImplementedError("Not Implemented Error")
 
@@ -111,7 +116,7 @@ def include_dataset_from_splitter(dataset_type, spliter_config, subset_num=2, me
 
     subset_1_pts, subset_1_labels = [], []
     subset_2_pts, subset_2_labels = [], []  # could be full-size
-    if "kmeans" in method:
+    if "kmeans" in method or "geo" in method:
         cluster_num = len(glob.glob(str(spliter_path) + "/" + method + "_1_*.npy"))
         subset_1_cluster = int(cluster_num * spliter_config["SAMPLE_RATE"])
         sample_method = "random"
