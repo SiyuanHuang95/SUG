@@ -1,5 +1,5 @@
 EXPERIMENT: DG_exp
-EXTRA_TAG: DG_Baseline_CLASS_BALANCE
+EXTRA_TAG: DG_SOFTMMD_GEOMETRIC
 DATA_ROOT: /point_dg/data
 LOGS_ROOT: /point_dg/logs
 
@@ -12,16 +12,15 @@ MODEL: MDA
 
 METHODS:
     CLASS_MMD: 
-        - NAME: HARD_MMD
+        - NAME: SOFT_MMD
+          LABEL_SCALE: 1.0
     # Use MMD loss only within same class
     TARGET_LOSS: 1.0
     # the weight of target split cls loss
     SRC_LOSS_WEIGHT: 1.0
-    CLASS_BALANCE: True
-    # Sample the batch with class-balanced
 
 DATASET_SPLITTER:
-    METHOD: Random
+    METHOD: Geometric
     SUBSET_FULLSIZE: False
     SAMPLE_RATE: 0.5
     TRAIN_BASE: 1
@@ -33,6 +32,3 @@ OPTIMIZATION:
     LR: 0.0001
     LR_SCALER: 1.0
     WEIGHT_DECAY: 0.0005
-    MOMENTUM: 0.9
-    # TODO Do we need to add more optimization parameters like adam_cycle？
-    # or it is not our current main focus

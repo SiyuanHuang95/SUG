@@ -1,5 +1,5 @@
 EXPERIMENT: DG_exp
-EXTRA_TAG: DG_SOFTMMD_ENTROPY
+EXTRA_TAG: DG_SOFTMMD_ENTROPY_CLASS_BALANCE
 DATA_ROOT: /point_dg/data
 LOGS_ROOT: /point_dg/logs
 
@@ -18,6 +18,8 @@ METHODS:
     TARGET_LOSS: 1.0
     # the weight of target split cls loss
     SRC_LOSS_WEIGHT: 1.0
+    CLASS_BALANCE: True
+    
 
 DATASET_SPLITTER:
     METHOD: Entropy
