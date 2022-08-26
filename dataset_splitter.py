@@ -32,6 +32,8 @@ def split_dataset_geometric(config):
     dataset_type = config["dataset_type"]
     cluster_num = config["cluster_num"]
     use_hist = False
+    if config.get("use_hist", False):
+        use_hist = config["use_hist"]
     assert cluster_num == 2, "Geometric Split Only Support 2 clusters"
     raw_pts, raw_labels = init_dataloader(dataset_type=dataset_type, get_raw_data=True)
 
@@ -329,7 +331,13 @@ if __name__ == "__main__":
             # cpkt only loads the 150-th epoch,not the best one
             if not os.path.join(cpkt_pth):
                 raise FileNotFoundError("The Pre-Trained Ckpt not found")
-            process_list.append({"pre_trained_": cpkt_pth, "dataset_type":dataset_type, "cluster_num":2, "model":None, "geomertic": True})
+            process_list.append(
+                {"pre_trained_": cpkt_pth, 
+                "dataset_type":dataset_type, 
+                "cluster_num":2, 
+                "model":None, 
+                "geomertic": True,
+                "use_hist": True})
         for procss_config in process_list:
             split_dataset_clusters(procss_config)
             # planned to use multi-process pool here, cuda not allowd...not fixed yet
