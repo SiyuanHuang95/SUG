@@ -55,32 +55,74 @@ def main():
     logger.info(f'The datasets used for testing: {test_datasets}')
 
     # Data loading
+    multi_spliter = False
+    # when split_config is a dict which means only one split method is used
     split_config = cfg["DATASET_SPLITTER"]
-    source_train_subsets = create_splitted_dataset(dataset_type=args.source, status="train", logger=logger, config=split_config)
-    source_train_dataset = source_train_subsets[split_config["TRAIN_BASE"]]
-    target_train_dataset1 = source_train_subsets[1-split_config["TRAIN_BASE"]]
+    if type(split_config) is dict:
+        source_train_subsets = create_splitted_dataset(dataset_type=args.source, status="train", logger=logger, config=split_config)
+        source_train_dataset = source_train_subsets[split_config["TRAIN_BASE"]]
+        target_train_dataset1 = source_train_subsets[1-split_config["TRAIN_BASE"]]
+    elif type(split_config) is list:
+        logger.info(f"{len(split_config)} types split methods are used.")
+        multi_spliter = True
+        source_train_datasets = []
+        target_train_datasets = []
+
+        for config_ in split_config:
+            source_train_subsets = create_splitted_dataset(dataset_type=args.source, status="train", logger=logger, config=config_)
+            source_train_datasets.append(source_train_subsets[split_config["TRAIN_BASE"]])
+            target_train_datasets.append(source_train_subsets[1-split_config["TRAIN_BASE"]])
+    else:
+        raise RuntimeError("Unsupported Splitter Config")
     # split 2 is fullsize
 
     source_test_dataset = create_single_dataset(args.source, status="test", aug=False)
     target_test_dataset1 = create_single_dataset(test_datasets[0], status="test", aug=False)
     target_test_dataset2 = create_single_dataset(test_datasets[-1], status="test", aug=False)
 
-    num_source_train = len(source_train_dataset)
+    if not multi_spliter:
+        num_source_train = len(source_train_dataset)
+        num_target_train1 = len(target_train_dataset1)
+        logger.info(f"Num of source train: {num_source_train}, Num of target train: {num_target_train1}")
+
+        if cfg.get("CLASS_BALANCE", False):
+            sampler_1 = Sampler(source_train_dataset.classes(), class_per_batch=10, batch_size=BATCH_SIZE)
+            sampler_2 = Sampler(target_train_dataset1.classes(), class_per_batch=10, batch_size=BATCH_SIZE)
+            source_train_dataloader = DataLoader(source_train_dataset, batch_sampler=sampler_1, num_workers=2)
+            target_train_dataloader = DataLoader(target_train_dataset1, batch_sampler=sampler_2, num_workers=2)
+        else:
+            source_train_dataloader = DataLoader(source_train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
+                                                drop_last=True)
+            target_train_dataloader = DataLoader(target_train_dataset1, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
+                                                drop_last=True)
+    else:
+        source_train_dataloaders = []
+        target_train_dataloaders = []
+        for st,tt in zip(source_train_datasets, target_train_datasets):
+            num_source_train = len(st)
+            num_target_train1 = len(tt)
+            logger.info(f"For Current Split Method: Num of source train: {num_source_train}, Num of target train: {num_target_train1}")
+
+            if cfg.get("CLASS_BALANCE", False):
+                sampler_1 = Sampler(st.classes(), class_per_batch=10, batch_size=BATCH_SIZE)
+                sampler_2 = Sampler(tt.classes(), class_per_batch=10, batch_size=BATCH_SIZE)
+                source_train_dataloader = DataLoader(st, batch_sampler=sampler_1, num_workers=2)
+                target_train_dataloader = DataLoader(tt, batch_sampler=sampler_2, num_workers=2)
+            else:
+                source_train_dataloader = DataLoader(st, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
+                                                    drop_last=True)
+                target_train_dataloader = DataLoader(tt, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
+                                                    drop_last=True)
+
+            source_train_dataloaders.append(source_train_dataloader)
+            target_train_dataloaders.append(target_train_dataloader)
+
     num_source_test = len(source_test_dataset)
-    num_target_train1 = len(target_train_dataset1)
     num_target_test1 = len(target_test_dataset1)
     num_target_test2 = len(target_test_dataset2)
+    logger.info(f"Num of source test: {num_source_test}, Num of test on {test_datasets[0]} {num_target_test1}, on {test_datasets[-1]} {num_target_test2}")
 
-    if cfg.get("CLASS_BALANCE", False):
-        sampler_1 = Sampler(source_train_dataset.classes(), class_per_batch=10, batch_size=BATCH_SIZE)
-        sampler_2 = Sampler(target_train_dataset1.classes(), class_per_batch=10, batch_size=BATCH_SIZE)
-        source_train_dataloader = DataLoader(source_train_dataset, batch_sampler=sampler_1, num_workers=2)
-        target_train_dataloader = DataLoader(target_train_dataset1, batch_sampler=sampler_2, num_workers=2)
-    else:
-        source_train_dataloader = DataLoader(source_train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
-                                            drop_last=True)
-        target_train_dataloader = DataLoader(target_train_dataset1, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
-                                            drop_last=True)
+    
 
     source_test_dataloader = DataLoader(source_test_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
                                         drop_last=True)
@@ -91,8 +133,6 @@ def main():
     performance_test_sets = {"source": source_test_dataloader, "test1": target_test_dataloader1,
                              "test2": target_test_dataloader2}
 
-    logger.info(f"Num of source train: {num_source_train}, Num of target train: {num_target_train1}")
-    logger.info(f"Num of source test: {num_source_test}, Num of test on {test_datasets[0]} {num_target_test1}, on {test_datasets[-1]} {num_target_test2}")
     logger.info(f'batch_size: {BATCH_SIZE}')
 
     best_test_acc = {"source": [0, 0], "test1":[0, 0], "test2":[0, 0]}
@@ -152,6 +192,12 @@ def main():
         data_t_total = 0
         cons = math.sin((epoch + 1) / max_epoch_num * math.pi / 2)
 
+        # choose for current epoch, which split method will be used
+        if multi_spliter:
+            idx = epoch % len(source_train_dataloaders)
+            source_train_dataloader = source_train_dataloaders[idx]
+            target_train_dataloader = target_train_dataloaders[idx]
+        
         # Training
         for batch_idx, (batch_s, batch_t) in enumerate(zip(source_train_dataloader, target_train_dataloader)):
             data, label = batch_s
