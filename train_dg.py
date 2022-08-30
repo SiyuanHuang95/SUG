@@ -70,8 +70,8 @@ def main():
 
         for config_ in split_config:
             source_train_subsets = create_splitted_dataset(dataset_type=args.source, status="train", logger=logger, config=config_)
-            source_train_datasets.append(source_train_subsets[split_config["TRAIN_BASE"]])
-            target_train_datasets.append(source_train_subsets[1-split_config["TRAIN_BASE"]])
+            source_train_datasets.append(source_train_subsets[config_["TRAIN_BASE"]])
+            target_train_datasets.append(source_train_subsets[1-config_["TRAIN_BASE"]])
     else:
         raise RuntimeError("Unsupported Splitter Config")
     # split 2 is fullsize

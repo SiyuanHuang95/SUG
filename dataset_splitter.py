@@ -11,17 +11,23 @@ from data.data_utils import normal_pc, fps
 
 import os
 import shutil
+import argparse
+
 import torch
 import torch.nn.functional as F
+from torch.utils.data import DataLoader
 
-import argparse
 import numpy as np
 import open3d as o3d
-from torch.utils.data import DataLoader
 from sklearn.manifold import TSNE
 from sklearn.cluster import KMeans
 from scipy.special import kl_div
 from scipy.cluster.hierarchy import fclusterdata
+
+try:
+    from open3d.registration import registration_icp
+except:
+    from open3d.pipelines.registration import registration_icp
 
 
 def x_min(ele):
@@ -220,10 +226,8 @@ def icp_distance(pts1, pts2):
     pcd2 = o3d.geometry.PointCloud()
     pcd2.points = o3d.utility.Vector3dVector(pts2[:, 0:3])
 
-    result_icp = o3d.pipelines.registration.registration_icp(
-        source=pcd1, target=pcd2, max_correspondence_distance=0.15
-    )
-
+    result_icp = registration_icp(source=pcd1, target=pcd2, 
+                                max_correspondence_distance=0.15)
     return 1 - result_icp.fitness
 
 
@@ -318,6 +322,7 @@ if __name__ == "__main__":
     parser.add_argument('--process_all', action="store_true", default=False, help="Whether to process all")
     args = parser.parse_args()
     args.pre_trained =  "/point_dg/data/output/Source_Baseline/ckpt/Source_exp/Source_Baseline"
+    # args.pre_trained =  "/mnt/lustre/huangsiyuan/data/PointDA_data/output/Source_Baseline/ckpt/Source_exp/Source_Baseline"
     args.process_all = True
     
     if args.process_all:
@@ -337,7 +342,8 @@ if __name__ == "__main__":
                 "cluster_num":2, 
                 "model":None, 
                 "geomertic": True,
-                "use_hist": True})
+                "use_hist": False})
+            # process_list.append({"pre_trained_": cpkt_pth, "dataset_type":dataset_type, "cluster_num":4, "model":None})
         for procss_config in process_list:
             split_dataset_clusters(procss_config)
             # planned to use multi-process pool here, cuda not allowd...not fixed yet
