@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader
+from easydict import EasyDict
+
 from model.model_pointnet import Pointnet_cls as Pointnet_cls
 import model.Model as mM
 import time
@@ -58,7 +60,7 @@ def main():
     multi_spliter = False
     # when split_config is a dict which means only one split method is used
     split_config = cfg["DATASET_SPLITTER"]
-    if type(split_config) is dict:
+    if type(split_config) is EasyDict:
         source_train_subsets = create_splitted_dataset(dataset_type=args.source, status="train", logger=logger, config=split_config)
         source_train_dataset = source_train_subsets[split_config["TRAIN_BASE"]]
         target_train_dataset1 = source_train_subsets[1-split_config["TRAIN_BASE"]]
@@ -73,7 +75,7 @@ def main():
             source_train_datasets.append(source_train_subsets[config_["TRAIN_BASE"]])
             target_train_datasets.append(source_train_subsets[1-config_["TRAIN_BASE"]])
     else:
-        raise RuntimeError("Unsupported Splitter Config")
+        raise RuntimeError(f"Unsupported Splitter Config {type(split_config)}")
     # split 2 is fullsize
 
     source_test_dataset = create_single_dataset(args.source, status="test", aug=False)
