@@ -19,6 +19,7 @@ import datetime
 import copy
 from utils.eval_utils import eval_worker
 from utils.train_utils import save_checkpoint, checkpoint_state, adjust_learning_rate, discrepancy, Sampler
+from model.model_utils import focal_loss
 from utils.common_utils import create_logger, exp_log_folder_creator
 from utils.config import parser_config, log_config_to_file
 from data.dataloader import create_splitted_dataset, create_single_dataset
@@ -149,15 +150,21 @@ def main():
     logger.info(model)
     model = model.to(device=device)
 
-    criterion = nn.CrossEntropyLoss()
-    criterion = criterion.to(device=device)
+    optim_cfg = cfg["OPTIMIZATION"]
+
+    if optim_cfg.get("CLS_LOSS", "CrossEntropyLoss") == "FocalLoss":
+
+        criterion = focal_loss(num_classes=10, gamma=optim_cfg["FOCAL_GAMMA"])
+    else:
+        criterion = nn.CrossEntropyLoss()
+        criterion = criterion.to(device=device)
 
     # Optimizer Setting
     remain_epoch = 50
-    max_epoch_num = cfg["OPTIMIZATION"]["NUM_EPOCHES"]
-    LR = cfg["OPTIMIZATION"]["LR"]
-    weight_decay = cfg["OPTIMIZATION"]["WEIGHT_DECAY"]
-    scaler = cfg["OPTIMIZATION"]["LR_SCALER"]
+    max_epoch_num = optim_cfg["NUM_EPOCHES"]
+    LR = optim_cfg["LR"]
+    weight_decay = optim_cfg["WEIGHT_DECAY"]
+    scaler = optim_cfg["LR_SCALER"]
 
     params = [{'params': v} for k, v in model.g.named_parameters() if 'pred_offset' not in k]
 

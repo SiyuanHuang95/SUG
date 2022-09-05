@@ -192,14 +192,28 @@ class UnifiedPointDG(data.Dataset):
         self.labels = labels
 
         self.class_num = 10
+        self.dataset_size = pts.shape[0]
         self.indices = [[] for _ in range(self.class_num)]
+         
         for i, label in enumerate(labels):
             self.indices[int(label)].append(i)
+        self.cls_num_counter = [ len(cls_index) for cls_index in self.indices]
 
-        print(f"Create {status} Dataset {dataset_type} with pts {pts.shape[0]}")
+        print(f"Create {status} Dataset {dataset_type} with pts {self.dataset_size}")
+        print(f"Cls number {self.cls_num_counter}")
 
     def classes(self):
         return self.indices
+
+    def cls_wights(self, weighting="number_inverse"):
+        if weighting == "number_inverse":
+            return 
+        elif weighting == "exp_inverse":
+            exp_cls = [np.exp(-cls_num/self.dataset_size) for cls_num in self.cls_num_counter]
+            weights = [exp_cls_ / sum(exp_cls) for exp_cls_ in exp_cls]
+            return weights
+        else:
+            raise RuntimeError("Non-Implemented Method")
 
     def __getitem__(self, index):
         raw_pts = self.pts[index][:, :3]  # for ScanNet, only x-y-z features are used

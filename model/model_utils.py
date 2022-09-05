@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import model.point_utils as point_utils
 
+import torch.nn.functional as F
+from torch.autograd import Variable,Function
 
 class conv_2d(nn.Module):
     def __init__(self, in_ch, out_ch, kernel, activation='relu'):
@@ -120,3 +122,51 @@ class adapt_layer_off(nn.Module):
         output_fea = point_utils.upsample_inter(input_loc, node_loc, input_fea, node_fea, k=3).unsqueeze(3)
 
         return output_fea, node_fea, node_offset
+
+
+class focal_loss(nn.Module):
+    def __init__(self, alpha=0.25, gamma=2, num_classes = 3, size_average=True):
+        """
+        focal_loss, -alpha * (1-yi)** gamma * ce_loss(xi,yi)
+        :param alpha:   
+        :param gamma:   
+        :param num_classes:    
+        :param size_average:   
+        """
+        super(focal_loss,self).__init__()
+        self.size_average = size_average
+        if isinstance(alpha,list):
+            assert len(alpha)==num_classes   
+            self.alpha = torch.Tensor(alpha)
+        else:
+            # use same weight for all-cls
+            alpha = [ 1 / num_classes] * num_classes
+            self.alpha = torch.Tensor(alpha)
+
+        self.gamma = gamma
+
+    def forward(self, preds, labels):
+        """
+        focal_loss
+        :param preds:   size:[B,N,C] or [B,C]
+        :param labels:  size:[B,N] or [B]
+        :return:
+        """
+        # assert preds.dim()==2 and labels.dim()==1
+        preds = preds.view(-1,preds.size(-1))
+        self.alpha = self.alpha.to(preds.device)
+        preds_logsoft = F.log_softmax(preds, dim=1) # log_softmax
+        preds_softmax = torch.exp(preds_logsoft)    # softmax
+
+        preds_softmax = preds_softmax.gather(1,labels.view(-1,1))   # nll_loss ( crossempty = log_softmax + nll )
+        preds_logsoft = preds_logsoft.gather(1,labels.view(-1,1))
+        self.alpha = self.alpha.gather(0,labels.view(-1))
+        loss = -torch.mul(torch.pow((1-preds_softmax), self.gamma), preds_logsoft)  
+        # torch.pow((1-preds_softmax), self.gamma) -> (1-pt)**γ
+
+        loss = torch.mul(self.alpha, loss.t())
+        if self.size_average:
+            loss = loss.mean()
+        else:
+            loss = loss.sum()
+        return loss
