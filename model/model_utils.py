@@ -125,7 +125,7 @@ class adapt_layer_off(nn.Module):
 
 
 class focal_loss(nn.Module):
-    def __init__(self, alpha=0.25, gamma=2, num_classes = 3, size_average=True):
+    def __init__(self, alpha=None, gamma=2, num_classes = 3, size_average=True):
         """
         focal_loss, -alpha * (1-yi)** gamma * ce_loss(xi,yi)
         :param alpha:   

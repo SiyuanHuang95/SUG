@@ -34,5 +34,6 @@ OPTIMIZATION:
     LR_SCALER: 1.0
     WEIGHT_DECAY: 0.0005
     MOMENTUM: 0.9
-    # TODO Do we need to add more optimization parameters like adam_cycle？
-    # or it is not our current main focus
+
+    CLS_LOSS: FocalLoss
+    FOCAL_GAMMA: 2.0

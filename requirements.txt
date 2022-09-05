@@ -4,4 +4,4 @@ matplotlib
 easydict
 numpy
 sklearn
-open3d
+# open3d

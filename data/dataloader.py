@@ -207,13 +207,21 @@ class UnifiedPointDG(data.Dataset):
 
     def cls_wights(self, weighting="number_inverse"):
         if weighting == "number_inverse":
-            return 
+            num_inv = [ 1/num_cls for num_cls in self.cls_num_counter]
+            weights = [num_inv_ / sum(num_inv) for num_inv_ in num_inv]
+            return weights
         elif weighting == "exp_inverse":
-            exp_cls = [np.exp(-cls_num/self.dataset_size) for cls_num in self.cls_num_counter]
+            exp_cls = [np.exp(-cls_num / self.dataset_size) for cls_num in self.cls_num_counter]
             weights = [exp_cls_ / sum(exp_cls) for exp_cls_ in exp_cls]
             return weights
+        elif weighting == "DLSA":
+            # Constructing Balance from Imbalance: Cewu Lu
+            q = 2.0
+            sample_num_neg_power = [np.power(cls_num, -q) for cls_num in self.cls_num_counter]
+            weights = [cls_weight / sum(sample_num_neg_power) for cls_weight in sample_num_neg_power]
+            return weights
         else:
-            raise RuntimeError("Non-Implemented Method")
+            return [ 1 / self.class_num] * self.class_num
 
     def __getitem__(self, index):
         raw_pts = self.pts[index][:, :3]  # for ScanNet, only x-y-z features are used
