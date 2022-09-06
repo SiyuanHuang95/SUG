@@ -156,9 +156,17 @@ def main():
         cls_weights=None
         if opt_cfg.get("CLS_WEIGHT", None):
             cls_weights = source_train_dataset.cls_wights(weighting=opt_cfg["CLS_WEIGHT"])
-        criterion = focal_loss(num_classes=10, gamma=opt_cfg["FOCAL_GAMMA"], alpha=cls_weights)
+        criterion = focal_loss(num_classes=cfg["DATASET"]["NUM_CLASS"], gamma=opt_cfg["FOCAL_GAMMA"], alpha=cls_weights)
         logger.info(f"FocalLoss: alpha {cls_weights}")
         logger.info(f"FocalLoss: gamma {opt_cfg['FOCAL_GAMMA']}")
+    elif opt_cfg.get("CLS_LOSS", "CrossEntropyLoss") == "ClassWeighting":
+        gamma = 0.0
+        # when gamma is zero, FL degrades to class re-weighting
+        if not opt_cfg.get("CLS_WEIGHT", None):
+            raise RuntimeError("When setting ClassWeighting, CLS_WEIGHT should be provided")
+        cls_weights = source_train_dataset.cls_wights(weighting=opt_cfg["CLS_WEIGHT"])
+        criterion = focal_loss(num_classes=cfg["DATASET"]["NUM_CLASS"], gamma=gamma, alpha=cls_weights)
+        logger.info(f"ClassWeighting: Weights: {cls_weights}")
     else:
         criterion = nn.CrossEntropyLoss()
         criterion = criterion.to(device=device)
@@ -228,8 +236,8 @@ def main():
             loss_s1 = criterion(pred_s1, label)
             loss_s2 = criterion(pred_s2, label)
 
-            # Adversarial loss -> let two heads of the model output similiar
-            loss_adv = - 1 * discrepancy(pred_t1, pred_t2)
+            # Adversarial loss -> let two heads of the model output similar
+            loss_adv = - cfg["METHODS"]["ADV_WEIGHT"] * discrepancy(pred_t1, pred_t2)
             loss_s = loss_s1 + loss_s2
             if cfg["METHODS"]["TARGET_LOSS"] > 0:
                 loss_t1 = criterion(pred_t1, label)
@@ -249,7 +257,7 @@ def main():
             feat_node_s = model(data, node_adaptation_s=True)  # shape: batch_size * 4096
             feat_node_t = model(data_t, node_adaptation_t=True)
 
-            loss_node_adv = 1 * mmd.mmd_cal(label, feat_node_s, label_t, feat_node_t, cfg["METHODS"]["CLASS_MMD"][0])           
+            loss_node_adv = cfg["METHODS"]["MMD_WEIGHT"] * mmd.mmd_cal(label, feat_node_s, label_t, feat_node_t, cfg["METHODS"]["CLASS_MMD"][0])           
             loss = loss_node_adv
             loss.backward()
             optimizer_dis.step()

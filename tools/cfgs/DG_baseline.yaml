@@ -20,6 +20,11 @@ METHODS:
     CLASS_BALANCE: True
     # Sample the batch with class-balanced
 
+    MMD_WEIGHT: 0.1
+    # the weight of total MMD loss
+    ADV_WEIGHT: 1
+    # two heads of the model output similar
+
 DATASET_SPLITTER:
     METHOD: Random
     SUBSET_FULLSIZE: False
