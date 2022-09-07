@@ -66,6 +66,13 @@ ERROR: Couldn’t connect to Docker daemon at http+docker://localunixsocket - is
 - sudo su
 - su huangsiyuan
 
+### Other dependiences
+
+1. Chamfer Distance
+
+```shell
+pip install git+'https://github.com/otaheri/chamfer_distance'
+```
 
 ## Data Download
 Download the [PointDA-10](https://drive.google.com/file/d/1-LfJWL5geF9h0Z2QpdTL0n4lShy8wy2J/view?usp=sharing) and extract it as the dataset fold. 

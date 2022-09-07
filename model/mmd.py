@@ -4,8 +4,10 @@
 import pdb
 import torch
 import numpy as np
+from functools import partial
 
 from utils.common_utils import create_one_hot_labels, get_most_overlapped_element
+from chamfer_distance import ChamferDistance
 
 min_var_est = 1e-8
 sigma_list = [0.01, 0.1, 1, 10, 100]
@@ -57,6 +59,46 @@ def max_hard_mmd(label_s, feat_s, label_t, feat_t):
     selected_feat_node_t = feat_t[ind_t]
     return mix_rbf_mmd2(selected_feat_node_s, selected_feat_node_t, sigma_list)
 
+
+def geometric_weights(pc_s, pc_t, metric="chamfer_distance", weighting="exp_inverse"):
+    assert pc_s.shape[0] == pc_t.shape[0]
+    criteria = None
+    if metric == "chamfer_distance":
+        cd = ChamferDistance()
+        criteria = partial(cd_distance, chamfer_dist=cd)
+
+
+    distance = []
+    for pc_1, pc_2 in zip(pc_s, pc_t):
+        dis = criteria(pc_1, pc_2)
+        distance.append(dis)
+    
+    weights = distance2weights(distances=distance, method=weighting)
+    return torch.tensor(np.array(weights).reshape(1, -1))
+
+def entropy_weights(pred_s, pred_t):
+    pass
+
+
+def cd_distance(pc1, pc2, chamfer_dist, batch_loss=True):
+    dist1, dist2, idx1, idx2 = chamfer_dist(pc1,pc2)
+    if not batch_loss:
+        loss = (torch.mean(dist1)) + (torch.mean(dist2))
+    else:
+        loss = torch.mean(dist1, dim=1) +  torch.mean(dist2, dim=1)
+    return loss
+
+
+def distance2weights(distances, method="naive_inverse"):
+    # Distances: List 
+    # Return: 
+    if method == "naive_inverse":
+        nai_weights = [ 1 / (dis + min_var_est) for dis in distances]
+        weights = [cls_weight / sum(nai_weights) for cls_weight in nai_weights]
+    elif method == "exp_inverse":
+        exp_cls = [np.exp(- dis ) for dis in distances]
+        weights = [exp_cls_ / sum(exp_cls) for exp_cls_ in exp_cls]
+    return weights
 
 # Consider linear time MMD with a linear kernel:
 # K(f(x), f(y)) = f(x)^Tf(y)
