@@ -24,11 +24,6 @@ from sklearn.cluster import KMeans
 from scipy.special import kl_div
 from scipy.cluster.hierarchy import fclusterdata
 
-try:
-    from open3d.registration import registration_icp
-except:
-    from open3d.pipelines.registration import registration_icp
-
 
 def x_min(ele):
     return np.min(ele[:, 0])
@@ -220,6 +215,11 @@ def entropy_clustering(probs, cluster_num=4):
 
 
 def icp_distance(pts1, pts2):
+    try:
+        from open3d.registration import registration_icp
+    except:
+        from open3d.pipelines.registration import registration_icp
+        
     pcd1 = o3d.geometry.PointCloud()
     pcd1.points = o3d.utility.Vector3dVector(pts1[:, 0:3])
 

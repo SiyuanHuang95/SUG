@@ -1,3 +1,4 @@
+from sqlite3 import adapt
 from model.model_utils import *
 import pdb
 import os
@@ -5,7 +6,7 @@ import torch.nn.functional as F
 
 
 # Channel Attention
-class CALayer(nn.Module):
+class  CALayer(nn.Module):
     def __init__(self, channel, reduction=8):
         super(CALayer, self).__init__()
         # feature channel downscale and upscale --> channel weight
@@ -69,16 +70,17 @@ class Pointnet_g(nn.Module):
         x = x.transpose(2, 1)
         x = self.conv1(x)
         x = self.conv2(x)
-        transform = self.trans_net2(x)
-        x = x.transpose(2, 1)
+        transform = self.trans_net2(x) # 64 * 3 * 3
+        x = x.transpose(2, 1) # 64 * 1024 * 64 * 1
 
-        x = x.squeeze(-1)
-        x = torch.bmm(x, transform)
+        x = x.squeeze(-1) # 64 * 1024 * 64
+        x = torch.bmm(x, transform) 
         x = x.unsqueeze(3)
         x = x.transpose(2, 1)
 
         x, node_fea, node_off = self.conv3(x, x_loc)
-        # x = [B, dim, num_node, 1]/[64, 64, 1024, 1]; x_loc = [B, xyz, num_node] / [64, 3, 1024]
+        # node_off: 64 * 3 * 64 node_fea: 64 * 64* 64 *1
+        # x = [B, dim, num_node, 1]/[64, 128, 1024, 1]; x_loc = [B, xyz, num_node] / [64, 3, 1024]
         x = self.conv4(x)
         x = self.conv5(x)
 
@@ -98,11 +100,29 @@ class Pointnet_g(nn.Module):
 class Pointnet_c(nn.Module):
     def __init__(self, num_class=10):
         super(Pointnet_c, self).__init__()
-        self.fc = nn.Linear(1024, num_class)
+        # classifier in PointDAN
+        # self.fc = nn.Linear(1024, num_class)
+        
+        # classifier in PointNet
+        self.mlp1 = fc_layer(1024, 512, bn=False)
+        self.dropout1 = nn.Dropout2d(p=0.7)
+        self.mlp2 = fc_layer(512, 256, bn=False)
+        self.dropout2 = nn.Dropout2d(p=0.7)
+        self.mlp3 = nn.Linear(256, num_class)
 
-    def forward(self, x):
-        x = self.fc(x)
-        return x
+    def forward(self, x, adapt=False):
+        x = self.mlp1(x)  # batchsize*512
+        x = self.dropout1(x)
+        x = self.mlp2(x)  # batchsize*256
+        if adapt == True:
+            mid_feature = x 
+        # mid_feature: bs * 256
+        x = self.dropout2(x)
+        x = self.mlp3(x)  # batchsize*10
+        if adapt == False:
+            return x
+        else:
+            return x, mid_feature
 
 
 class Net_MDA(nn.Module):
@@ -116,7 +136,7 @@ class Net_MDA(nn.Module):
             self.c2 = Pointnet_c()
 
     def forward(self, x, constant=1, adaptation=False, node_vis=False, mid_feat=False, node_adaptation_s=False,
-                node_adaptation_t=False):
+                node_adaptation_t=False, semantic_adaption=False):
         x, feat_ori, node_idx = self.g(x, node=True)
         batch_size = feat_ori.size(0)
 
@@ -127,6 +147,7 @@ class Net_MDA(nn.Module):
         # collect mid-level feat
         if mid_feat:
             return x, feat_ori
+            # x: 64 * 1024  feat_ori: 64 * 64 * 64
 
         if node_adaptation_s:
             # source domain sa node feat
@@ -142,6 +163,12 @@ class Net_MDA(nn.Module):
         if adaptation:
             x = grad_reverse(x, constant)
 
-        y1 = self.c1(x)
-        y2 = self.c2(x)
-        return y1, y2
+        if not semantic_adaption:
+            y1 = self.c1(x, adapt=semantic_adaption)
+            y2 = self.c2(x, adapt=semantic_adaption)
+            return y1, y2
+        else:
+            y1, sem_feature1 = self.c1(x, adapt=semantic_adaption)
+            y2, sem_feature2 = self.c2(x, adapt=semantic_adaption)
+            return y1, y2, sem_feature1, sem_feature2
+ 

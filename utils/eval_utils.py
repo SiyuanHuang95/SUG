@@ -8,6 +8,7 @@ def eval_worker(eval_dict, logger):
     dataset = eval_dict["dataset"]
     device = eval_dict["device"]
     criterion = eval_dict["criterion"]
+    # TODO when do eval, should still CE be used?
     epoch = eval_dict["epoch"]
     best_target_acc_epoch = eval_dict["best_target_acc_epoch"]
     num_class = eval_dict["num_class"]

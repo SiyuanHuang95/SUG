@@ -12,7 +12,8 @@ MODEL: MDA
 
 METHODS:
     CLASS_MMD: 
-        - NAME: HARD_MMD
+        - NAME: SOFT_MMD
+          LABEL_SCALE: 1.0
     # Use MMD loss only within same class
     TARGET_LOSS: 1.0
     # the weight of target split cls loss

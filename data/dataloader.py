@@ -234,6 +234,8 @@ class UnifiedPointDG(data.Dataset):
             pts = jitter_point_cloud(pts)
 
         if pts.shape[0] < self.num_points:
+            if pts.shape[0] < self.num_points / 1.5:
+                raise RuntimeWarning(f"Too few points {pts.shape[0]} for current frame {index}")
             pad_pc = np.zeros(
                 shape=(self.num_points - pts.shape[0], 3), dtype=float)
             pts = np.concatenate((pts, pad_pc), axis=0)
@@ -248,7 +250,7 @@ class UnifiedPointDG(data.Dataset):
         return self.pts.shape[0]
 
 
-def create_splitted_dataset(dataset_type, status="train", config=None, logger=None):
+def create_splitted_dataset(dataset_type, status="train", config=None, logger=None, pc_num=1024):
     dataset_list = ["scannet", "shapenet", "modelnet"]
     assert dataset_type in dataset_list, f"Not supported dataset {dataset_type}!"
 
@@ -260,18 +262,18 @@ def create_splitted_dataset(dataset_type, status="train", config=None, logger=No
         pts = dataset_spliter[subset]["pts"]
         label = dataset_spliter[subset]["label"]
         dataset_subsets.append(UnifiedPointDG(
-            dataset_type=dataset_type, pts=pts, labels=label, status=status))
+            dataset_type=dataset_type, pts=pts, labels=label, status=status, pc_input_num=pc_num))
 
     return dataset_subsets
 
 
-def create_single_dataset(dataset_type, status="train", aug=False):
+def create_single_dataset(dataset_type, status="train", aug=False, pc_num=1024):
     dataset_list = ["scannet", "shapenet", "modelnet"]
     assert dataset_type in dataset_list, f"Not supported dataset {dataset_type}!"
 
     pts, labels = include_dataset_full_information(dataset_type, status)
     assert len(set(labels.tolist())) == 10, "The class in labels is less than 10!"
-    return UnifiedPointDG(dataset_type=dataset_type, pts=pts, labels=labels, status=status, aug=aug)
+    return UnifiedPointDG(dataset_type=dataset_type, pts=pts, labels=labels, status=status, aug=aug, pc_input_num=pc_num)
 
 
 if __name__ == "__main__":

@@ -205,7 +205,7 @@ def main():
 
         model.train()
 
-        loss_total = 0
+        loss_cls_total = 0
         loss_adv_total = 0
         loss_node_total = 0
         correct_total = 0
@@ -224,13 +224,19 @@ def main():
             data, label = batch_s
             data_t, label_t = batch_t
 
+            # 64 * 3 * 1024
             data = data.to(device=device)
+            # label： 64
             label = label.to(device=device).long()
             data_t = data_t.to(device=device)
             label_t = label_t.to(device=device).long()
+            
 
-            pred_s1, pred_s2 = model(data)
-            pred_t1, pred_t2 = model(data_t, constant=cons, adaptation=True)
+            # Senmantic MMD loss
+            pred_s1, pred_s2, sem_fea_s1, sem_fea_s2 = model(data, semantic_adaption=True)
+            pred_t1, pred_t2, sem_fea_t1, sem_fea_t2 = model(data_t, semantic_adaption=True)
+            # no need for GRL now
+            # sem_fea_s1:64 * 256
 
             # Classification loss
             loss_s1 = criterion(pred_s1, label)
@@ -247,23 +253,26 @@ def main():
             else:
                 loss = cfg["METHODS"]["SRC_LOSS_WEIGHT"] * loss_s + loss_adv
 
+            loss_cls = loss
             loss.backward()
             optimizer_g.step()
             optimizer_c.step()
             optimizer_g.zero_grad()
             optimizer_c.zero_grad()
 
-            # Local Alignment
-            feat_node_s = model(data, node_adaptation_s=True)  # shape: batch_size * 4096
+            # geometric info
+            # Local Alignment -> self-adaptive node: contains geometry info
+            feat_node_s = model(data, node_adaptation_s=True)  # shape: batch_size * 4096 -> 64 * 64
             feat_node_t = model(data_t, node_adaptation_t=True)
 
+            # Add geometric weights -> do we need to downsample the pc?
             loss_node_adv = cfg["METHODS"]["MMD_WEIGHT"] * mmd.mmd_cal(label, feat_node_s, label_t, feat_node_t, cfg["METHODS"]["CLASS_MMD"][0])           
             loss = loss_node_adv
             loss.backward()
             optimizer_dis.step()
             optimizer_dis.zero_grad()
 
-            loss_total += loss_s.item() * data.size(0)
+            loss_cls_total += loss_cls.item() * data.size(0)
             loss_adv_total += loss_adv.item() * data.size(0)
             loss_node_total += loss_node_adv.item() * data.size(0)
             data_total += data.size(0)
@@ -271,7 +280,7 @@ def main():
 
             if (batch_idx + 1) % 10 == 0:
                 logger.info(f"Train Epoch {epoch} [{data_total} {data_t_total}/{num_source_train}:]")
-                logger.info(f"loss_s {loss_total / data_total} loss_adv: {loss_adv_total / data_total} loss_node_adv {loss_node_total / data_total}")
+                logger.info(f"loss_cls {loss_cls_total / data_total} loss_adv: {loss_adv_total / data_total} loss_node_adv {loss_node_total / data_total}")
 
         # Testing
         with torch.no_grad():

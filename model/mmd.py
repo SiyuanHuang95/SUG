@@ -1,13 +1,15 @@
 #!/usr/bin/env python
 # encoding: utf-8
 
+from dis import dis
 import pdb
 import torch
 import numpy as np
 from functools import partial
 
-from utils.common_utils import create_one_hot_labels, get_most_overlapped_element
+from utils.common_utils import create_one_hot_labels, get_most_overlapped_element, check_numpy_to_torch
 from chamfer_distance import ChamferDistance
+from dataset_splitter import kl_divergence_distance, cal_probs2entropy
 
 min_var_est = 1e-8
 sigma_list = [0.01, 0.1, 1, 10, 100]
@@ -76,8 +78,19 @@ def geometric_weights(pc_s, pc_t, metric="chamfer_distance", weighting="exp_inve
     weights = distance2weights(distances=distance, method=weighting)
     return torch.tensor(np.array(weights).reshape(1, -1))
 
-def entropy_weights(pred_s, pred_t):
-    pass
+
+def entropy_weights(pred_s, pred_t, weighting="exp_inverse"):
+    distance = entropy_dis(pred_s, pred_t)
+    weights = distance2weights(distances=distance, method=weighting)
+    return torch.tensor(np.array(weights).reshape(1, -1))
+
+
+def entropy_dis(pred_s, pred_t):
+    entropy_s = cal_probs2entropy(pred_s)
+    entropy_t = cal_probs2entropy(pred_t)
+
+    dis = kl_divergence_distance(entropy_s, entropy_t)
+    return dis
 
 
 def cd_distance(pc1, pc2, chamfer_dist, batch_loss=True):
@@ -98,6 +111,13 @@ def distance2weights(distances, method="naive_inverse"):
     elif method == "exp_inverse":
         exp_cls = [np.exp(- dis ) for dis in distances]
         weights = [exp_cls_ / sum(exp_cls) for exp_cls_ in exp_cls]
+    elif method == "hist":
+        cls_weights = np.arange(1, 0, -0.1)
+        weights = [0] * distances.shape[0]
+        value_edges = np.histogram(distances, bins=cls_weights.shape[0])[1]
+        for i in range(cls_weights.shape[0]):
+            pos=np.where( (distances>= value_edges[i] ) & (distances<  value_edges[i+1]))
+            weights[pos] = cls_weights[i]
     return weights
 
 # Consider linear time MMD with a linear kernel:
@@ -138,9 +158,9 @@ def poly_mmd2(f_of_X, f_of_Y, d=2, alpha=1.0, c=2.0):
 def _mix_rbf_kernel(X, Y, sigma_list):
     assert (X.size(0) == Y.size(0))
     m = X.size(0)
-
+    # Z: 128 * 4096 + C (128 = 2*64)
     Z = torch.cat((X, Y), 0)
-    ZZT = torch.mm(Z, Z.t())
+    ZZT = torch.mm(Z, Z.t()) # 128 * 128
     diag_ZZT = torch.diag(ZZT).unsqueeze(1)
     Z_norm_sqr = diag_ZZT.expand_as(ZZT)
     exponent = Z_norm_sqr - 2 * ZZT + Z_norm_sqr.t()
@@ -181,14 +201,14 @@ def _mmd2(K_XX, K_XY, K_YY, const_diagonal=False, biased=False):
     else:
         diag_X = torch.diag(K_XX)  # (m,)
         diag_Y = torch.diag(K_YY)  # (m,)
-        sum_diag_X = torch.sum(diag_X)
+        sum_diag_X = torch.sum(diag_X) # scalar
         sum_diag_Y = torch.sum(diag_Y)
 
-    Kt_XX_sums = K_XX.sum(dim=1) - diag_X  # \tilde{K}_XX * e = K_XX * e - diag_X
-    Kt_YY_sums = K_YY.sum(dim=1) - diag_Y  # \tilde{K}_YY * e = K_YY * e - diag_Y
-    K_XY_sums_0 = K_XY.sum(dim=0)  # K_{XY}^T * e
+    Kt_XX_sums = K_XX.sum(dim=1) - diag_X  # batch_szie \tilde{K}_XX * e = K_XX * e - diag_X
+    Kt_YY_sums = K_YY.sum(dim=1) - diag_Y  # batch_szie \tilde{K}_YY * e = K_YY * e - diag_Y
+    K_XY_sums_0 = K_XY.sum(dim=0)  # batch_szie K_{XY}^T * e
 
-    Kt_XX_sum = Kt_XX_sums.sum()  # e^T * \tilde{K}_XX * e
+    Kt_XX_sum = Kt_XX_sums.sum()  # scalar e^T * \tilde{K}_XX * e
     Kt_YY_sum = Kt_YY_sums.sum()  # e^T * \tilde{K}_YY * e
     K_XY_sum = K_XY_sums_0.sum()  # e^T * K_{XY} * e
 
