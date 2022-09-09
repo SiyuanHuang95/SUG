@@ -9,8 +9,8 @@ import datetime
 
 # data_root = "/point_dg/data"
 # data_root = "/data/point_cloud_classification/PointDA_data"
-data_root = "/mnt/lustre/huangsiyuan/data/PointDA_data"
-# data_root = "/home/siyuan/4-data/PointDA_data"
+# data_root = "/mnt/lustre/huangsiyuan/data/PointDA_data"
+data_root = "/home/siyuan/4-data/PointDA_data"
 num_class = 10
 dataset_list = ["scannet", "shapenet", "modelnet"]
 
@@ -30,7 +30,7 @@ def split_dataset(dataset_type, split_config, logger, status='train'):
     index_config_naming = "size_" + str(size_usage) + split_config["METHOD"] + "_" + str(
         split_config["SAMPLE_RATE"]) + ".pkl"
     index_file_storage = os.path.join(dataset_path, index_config_naming)
-    if os.path.exists(index_file_storage) and False:
+    if os.path.exists(index_file_storage) and split_config["RELOAD"]:
         logger.info(f"Direct load the indexing history from {index_file_storage}")
         with open(index_file_storage, "rb") as f:
             indexs = pickle.load(f)
@@ -83,6 +83,19 @@ def split_dataset(dataset_type, split_config, logger, status='train'):
             return include_dataset_from_splitter(dataset_type, split_config, method="geometric")
         else:
             raise NotImplementedError("Not Implemented Error")
+    else:
+        dataset_spliter = {
+                "subset_1": {
+                    "pts": full_pts[index_subset_1, :],
+                    "label": full_label[index_subset_1]
+                },
+
+                "subset_2": {
+                    "pts": full_pts[index_subset_2, :],
+                    "label": full_label[index_subset_2]
+                }
+            }
+        return dataset_spliter
 
 
 def include_dataset_full_information(dataset_type, status='train'):

@@ -63,6 +63,7 @@ def eval_worker(eval_dict, logger):
         "dataset": dataset,
         "epoch": epoch,
         "best_target_acc": best_target_acc,
-        "best_target_acc_epoch": best_target_acc_epoch
+        "best_target_acc_epoch": best_target_acc_epoch,
+        "cur_target_acc": pred_acc
     }
     return result

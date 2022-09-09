@@ -34,11 +34,13 @@ def mmd_cal(label_s, feat_s, label_t, feat_t, args:dict, data_s=None, data_t=Non
         raise RuntimeError("Not Supported MMD Method")
 
 
-def cal_sample_weights(data_s, data_t, args):
+def cal_sample_weights(data_s, data_t, args, label_s=None, label_t=None):
     if args.get("GEO_WEIGHTS", None):
         sample_weights = geometric_weights(data_s, data_t, args["GEO_WEIGHTS"])
     elif args.get("ENTROPY_WEIGHTS", None):
         sample_weights = entropy_weights(data_s, data_t, weighting=args["ENTROPY_WEIGHTS"])
+    elif args.get("SEM_WEIGHTS", None):
+        sample_weights = prob_weights_soft(data_s, data_t, label_s, label_t, args["LABEL_WEIGHT"], args["SEM_WEIGHTS"])
     else:
         raise RuntimeError("Not suppprted weighting opperation")
     return sample_weights
@@ -47,7 +49,7 @@ def cal_sample_weights(data_s, data_t, args):
 def soft_mmd(label_s, feat_s, label_t, feat_t, label_weight, sample_weights=None):
     """
         First covert the scalar label to one-hot vector
-        Concat the label vector (batch * 10) to the feat vector (batch *4096)
+        Concat the label vector (batch * 10) to the feat vector (batch * n) 4096 for geo-level and  256 for sem-level
     """
     label_s_one_hot = create_one_hot_labels(label_s).to(device='cuda')
     label_t_one_hot = create_one_hot_labels(label_t).to(device='cuda')
@@ -100,6 +102,24 @@ def geometric_weights(pc_s, pc_t, metric="chamfer_distance", weighting="none"):
     weights = distance2weights(distances=distance, method=weighting)
     return torch.tensor(np.array(weights).reshape(1, -1))
 
+
+def prob_weights_soft(pred_s, pred_t, label_s, label_t, label_weight, weighting="mean2one"):
+    assert label_weight < 1, "For Entropy, Label weight should be less than one"
+
+    label_s_one_hot = create_one_hot_labels(label_s)
+    pred_s_label = torch.cat((pred_s.view(-1, 10), label_s_one_hot * label_weight), dim=1)
+
+    label_t_one_hot = create_one_hot_labels(label_t)
+    pred_t_label = torch.cat((pred_t.view(-1, 10), label_t_one_hot * label_weight), dim=1)
+
+    distance = kl_divergence_distance(normalized(pred_s_label), normalized(pred_t_label)).sum(1)
+    weights = distance2weights(distances=distance, method=weighting)
+    return torch.tensor(np.array(weights).reshape(1, -1))
+
+
+def normalized(vec):
+    vec += min_var_est
+    return vec / torch.sum(vec)
 
 def entropy_weights(pred_s, pred_t, weighting="exp_inverse"):
     distance = entropy_dis(pred_s, pred_t)

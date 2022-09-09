@@ -205,7 +205,7 @@ class UnifiedPointDG(data.Dataset):
     def classes(self):
         return self.indices
 
-    def cls_wights(self, weighting="number_inverse"):
+    def cls_wights(self, weighting="number_inverse", q_=None):
         if weighting == "number_inverse":
             num_inv = [ 1/num_cls for num_cls in self.cls_num_counter]
             weights = [num_inv_ / sum(num_inv) for num_inv_ in num_inv]
@@ -216,7 +216,10 @@ class UnifiedPointDG(data.Dataset):
             return weights
         elif weighting == "DLSA":
             # Constructing Balance from Imbalance: Cewu Lu
-            q = 2.0
+            if q_ is not None:
+                q = q_
+            else:
+                q = 0.4
             sample_num_neg_power = [np.power(cls_num, -q) for cls_num in self.cls_num_counter]
             weights = [cls_weight / sum(sample_num_neg_power) for cls_weight in sample_num_neg_power]
             return weights

@@ -13,12 +13,12 @@ def parser_config():
     parser.add_argument('--cfg', type=str, default=None, help='specify the config for training')
     parser.add_argument('--source', '-s', type=str, help='source dataset', default='scannet')
     parser.add_argument('--batchsize', '-b', type=int, help='batch size', default=64)
-    parser.add_argument('--epochs', '-e', type=int, help='training epoch', default=200)
+    parser.add_argument('--epochs', '-e', type=int, help='training epoch', default=300)
     parser.add_argument('--gpu', '-g', type=str, help='cuda id', default='0')
 
     # basic paramter for cpkt-related
     parser.add_argument('--pretrained_model', type=str, default=None, help='pretrained_model')
-    parser.add_argument('--ckpt_save_interval', type=int, default=5, help='number of training epochs')
+    parser.add_argument('--ckpt_save_interval', type=int, default=10, help='number of training epochs')
     parser.add_argument('--max_ckpt_save_num', type=int, default=50, help='max number of saved checkpoint')
 
     parser.add_argument('--set', dest='set_cfgs', default=None, nargs=argparse.REMAINDER,

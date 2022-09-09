@@ -1,0 +1,58 @@
+EXPERIMENT: DG_exp
+EXTRA_TAG: DG_Baseline_LOSS_DLSA
+DATA_ROOT: /home/siyuan/4-data/PointDA_data
+LOGS_ROOT: /home/siyuan/4-data/PointDA_data
+
+DATASET:
+    NUM_CLASS: 10
+
+
+MODEL: MDA
+# alignment model
+
+METHODS:
+    MMD_WEIGHT: 1
+    # the weight of total MMD loss
+    GEO_MMD:
+        - NAME: SOFT_MMD
+          LABEL_SCALE: 50
+          # how one-hot vector influence the feature vector mmd
+          GEO_WEIGHTS: mean2one
+
+    SEM_MMD:
+        - NAME: SOFT_MMD
+          LABEL_SCALE: 5
+          SEM_WEIGHTS: mean2one
+          LABEL_WEIGHT: 0.5
+
+    CLASS_MMD: 
+        - NAME: SOFT_MMD
+          LABEL_SCALE: 1.0
+    # Use MMD loss only within same class
+    TARGET_LOSS: 1.0
+    # the weight of target split cls loss
+    SRC_LOSS_WEIGHT: 1.0
+    CLASS_BALANCE: True
+    # Sample the batch with class-balanced
+    ADV_WEIGHT: 0
+    # two heads of the model output similar
+
+DATASET_SPLITTER:
+    METHOD: Random
+    SUBSET_FULLSIZE: False
+    SAMPLE_RATE: 0.5
+    TRAIN_BASE: 1
+    RELOAD: True
+
+
+OPTIMIZATION:
+    NUM_EPOCHES: 200
+
+    LR: 0.0001
+    LR_SCALER: 1.0
+    WEIGHT_DECAY: 0.0005
+    MOMENTUM: 0.9
+
+    CLS_LOSS: ClassWeighting
+    CLS_WEIGHT: DLSA
+    DLSA_Q: 0.4

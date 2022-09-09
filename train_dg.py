@@ -164,7 +164,7 @@ def main():
         # when gamma is zero, FL degrades to class re-weighting
         if not opt_cfg.get("CLS_WEIGHT", None):
             raise RuntimeError("When setting ClassWeighting, CLS_WEIGHT should be provided")
-        cls_weights = source_train_dataset.cls_wights(weighting=opt_cfg["CLS_WEIGHT"])
+        cls_weights = source_train_dataset.cls_wights(weighting=opt_cfg["CLS_WEIGHT"], q=opt_cfg.get("DLSA_Q", None))
         criterion = focal_loss(num_classes=cfg["DATASET"]["NUM_CLASS"], gamma=gamma, alpha=cls_weights)
         logger.info(f"ClassWeighting: Weights: {cls_weights}")
     else:
@@ -207,7 +207,8 @@ def main():
 
         loss_cls_total = 0
         loss_adv_total = 0
-        loss_node_total = 0
+        loss_geo_total = 0
+        loss_sem_total = 0
         correct_total = 0
         data_total = 0
         data_t_total = 0
@@ -244,6 +245,8 @@ def main():
 
             # Adversarial loss -> let two heads of the model output similar
             loss_adv = - cfg["METHODS"]["ADV_WEIGHT"] * discrepancy(pred_t1, pred_t2)
+            # TODO Ablation to check wether need add loss_adv
+
             loss_s = loss_s1 + loss_s2
             if cfg["METHODS"]["TARGET_LOSS"] > 0:
                 loss_t1 = criterion(pred_t1, label)
@@ -254,33 +257,42 @@ def main():
                 loss = cfg["METHODS"]["SRC_LOSS_WEIGHT"] * loss_s + loss_adv
 
             loss_cls = loss
-            loss.backward()
-            optimizer_g.step()
-            optimizer_c.step()
-            optimizer_g.zero_grad()
-            optimizer_c.zero_grad()
+            # loss.backward()
+            # optimizer_g.step()
+            # optimizer_c.step()
+            # optimizer_g.zero_grad()
+            # optimizer_c.zero_grad()
 
             # geometric info
             # Local Alignment -> self-adaptive node: contains geometry info
             feat_node_s = model(data, node_adaptation_s=True)  # shape: batch_size * 4096 -> 64 * 64
             feat_node_t = model(data_t, node_adaptation_t=True)
+            # Add geometric weights
+            loss_geo_mmd = cfg["METHODS"]["MMD_WEIGHT"] * mmd.mmd_cal(label, feat_node_s, label_t, feat_node_t, cfg["METHODS"]["GEO_MMD"][0])           
+            
+            loss_sem_mmd_1 = cfg["METHODS"]["MMD_WEIGHT"] * mmd.mmd_cal(label, sem_fea_s1, label_t, sem_fea_t1, cfg["METHODS"]["SEM_MMD"][0])
+            loss_sem_mmd_2 = cfg["METHODS"]["MMD_WEIGHT"] * mmd.mmd_cal(label, sem_fea_s1, label_t, sem_fea_t1, cfg["METHODS"]["SEM_MMD"][0])
+            loss_sem_mmd = 0.5 * loss_sem_mmd_1 + 0.5 * loss_sem_mmd_2
 
-            # Add geometric weights -> do we need to downsample the pc?
-            loss_node_adv = cfg["METHODS"]["MMD_WEIGHT"] * mmd.mmd_cal(label, feat_node_s, label_t, feat_node_t, cfg["METHODS"]["CLASS_MMD"][0])           
-            loss = loss_node_adv
+            loss = loss_cls + loss_geo_mmd + loss_sem_mmd
             loss.backward()
             optimizer_dis.step()
+            optimizer_g.step()
+            optimizer_c.step()
+            optimizer_g.zero_grad()
+            optimizer_c.zero_grad()
             optimizer_dis.zero_grad()
 
             loss_cls_total += loss_cls.item() * data.size(0)
             loss_adv_total += loss_adv.item() * data.size(0)
-            loss_node_total += loss_node_adv.item() * data.size(0)
+            loss_geo_total += loss_geo_mmd.item() * data.size(0)
+            loss_sem_total += loss_sem_mmd.item() * data.size(0)
             data_total += data.size(0)
             data_t_total += data_t.size(0)
 
             if (batch_idx + 1) % 10 == 0:
                 logger.info(f"Train Epoch {epoch} [{data_total} {data_t_total}/{num_source_train}:]")
-                logger.info(f"loss_cls {loss_cls_total / data_total} loss_adv: {loss_adv_total / data_total} loss_node_adv {loss_node_total / data_total}")
+                logger.info(f"loss_cls {loss_cls_total / data_total} loss_adv: {loss_adv_total / data_total} loss_geo_mmd {loss_geo_total / data_total} loss_sem_mmd {loss_sem_total / data_total}")
 
         # Testing
         with torch.no_grad():
@@ -301,8 +313,11 @@ def main():
                 eval_result = eval_worker(eval_dict, logger)
                 best_test_acc[eval_dataset][1] = eval_result["best_target_acc"]
                 best_test_acc[eval_dataset][0] = eval_result["best_target_acc_epoch"]
-                writer_item = 'acc/' + eval_result["dataset"] + "_test_acc"
+                writer_item = 'acc/' + eval_result["dataset"] + "_" + dataset_remapping[eval_result["dataset"]] + "_best_acc"
                 writer.add_scalar(writer_item, eval_result["best_target_acc"], epoch)
+
+                writer_item = 'acc/' + eval_result["dataset"] + "_" + dataset_remapping[eval_result["dataset"]] + "_cur_acc"
+                writer.add_scalar(writer_item, eval_result["cur_target_acc"], epoch)
 
         trained_epoch = epoch + 1
         if trained_epoch % args.ckpt_save_interval == 0:
