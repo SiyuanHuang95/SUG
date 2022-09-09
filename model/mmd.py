@@ -1,8 +1,11 @@
 #!/usr/bin/env python
 # encoding: utf-8
 
+from ast import arg
+from copy import copy, deepcopy
 from dis import dis
 import pdb
+from turtle import distance
 import torch
 import numpy as np
 from functools import partial
@@ -14,9 +17,13 @@ from dataset_splitter import kl_divergence_distance, cal_probs2entropy
 min_var_est = 1e-8
 sigma_list = [0.01, 0.1, 1, 10, 100]
 
-def mmd_cal(label_s, feat_s, label_t, feat_t, args:dict):
+def mmd_cal(label_s, feat_s, label_t, feat_t, args:dict, data_s=None, data_t=None):
+    # Currently, lets use SOFT_MMD 
+    sample_weights = None
+    if data_s is not None:
+        sample_weights = cal_sample_weights(data_s, data_t, args)
     if args["NAME"] == "SOFT_MMD":
-        return soft_mmd(label_s, feat_s, label_t, feat_t, float(args["LABEL_SCALE"]))
+        return soft_mmd(label_s, feat_s, label_t, feat_t, float(args["LABEL_SCALE"]), sample_weights=sample_weights)
     elif args["NAME"] == "HARD_MMD":
         return hard_mmd(label_s, feat_s, label_t, feat_t)
     elif args["NAME"]  == "MAX_HARD_MMD":
@@ -27,7 +34,17 @@ def mmd_cal(label_s, feat_s, label_t, feat_t, args:dict):
         raise RuntimeError("Not Supported MMD Method")
 
 
-def soft_mmd(label_s, feat_s, label_t, feat_t, label_weight):
+def cal_sample_weights(data_s, data_t, args):
+    if args.get("GEO_WEIGHTS", None):
+        sample_weights = geometric_weights(data_s, data_t, args["GEO_WEIGHTS"])
+    elif args.get("ENTROPY_WEIGHTS", None):
+        sample_weights = entropy_weights(data_s, data_t, weighting=args["ENTROPY_WEIGHTS"])
+    else:
+        raise RuntimeError("Not suppprted weighting opperation")
+    return sample_weights
+
+
+def soft_mmd(label_s, feat_s, label_t, feat_t, label_weight, sample_weights=None):
     """
         First covert the scalar label to one-hot vector
         Concat the label vector (batch * 10) to the feat vector (batch *4096)
@@ -62,19 +79,24 @@ def max_hard_mmd(label_s, feat_s, label_t, feat_t):
     return mix_rbf_mmd2(selected_feat_node_s, selected_feat_node_t, sigma_list)
 
 
-def geometric_weights(pc_s, pc_t, metric="chamfer_distance", weighting="exp_inverse"):
+def geometric_weights(pc_s, pc_t, metric="chamfer_distance", weighting="none"):
     assert pc_s.shape[0] == pc_t.shape[0]
     criteria = None
     if metric == "chamfer_distance":
         cd = ChamferDistance()
         criteria = partial(cd_distance, chamfer_dist=cd)
+        # to use the CD, the pc should be batch_size * num_points *3
+        # return torch.tensor(batch_size)
 
+    if pc_s.shape[1] == 3:
+        # batch * 3 * num_points -> batch * num_points * 3
+        pc_1 = pc_s.transpose(1,2).squeeze()
+        pc_2 = pc_t.transpose(1,2).squeeze()
+    else:
+        pc_1 = pc_s
+        pc_2 = pc_t
 
-    distance = []
-    for pc_1, pc_2 in zip(pc_s, pc_t):
-        dis = criteria(pc_1, pc_2)
-        distance.append(dis)
-    
+    distance = criteria(pc_1, pc_2)
     weights = distance2weights(distances=distance, method=weighting)
     return torch.tensor(np.array(weights).reshape(1, -1))
 
@@ -118,6 +140,14 @@ def distance2weights(distances, method="naive_inverse"):
         for i in range(cls_weights.shape[0]):
             pos=np.where( (distances>= value_edges[i] ) & (distances<  value_edges[i+1]))
             weights[pos] = cls_weights[i]
+    elif method == "none":
+        weights = deepcopy(distances)
+        # mmd would be much larger than naive one 
+
+    elif method == "mean2one":
+        # the mean to be one -> mean valued-pair is same to naive mmd
+        scale_ = (1 /dis.mean()).type(torch.int)
+        weights = distance * scale_
     return weights
 
 # Consider linear time MMD with a linear kernel:
@@ -173,10 +203,10 @@ def _mix_rbf_kernel(X, Y, sigma_list):
     return K[:m, :m], K[:m, m:], K[m:, m:], len(sigma_list)
 
 
-def mix_rbf_mmd2(X, Y, sigma_list, biased=True):
+def mix_rbf_mmd2(X, Y, sigma_list, biased=True, sample_weights=None):
     K_XX, K_XY, K_YY, d = _mix_rbf_kernel(X, Y, sigma_list)
     # return _mmd2(K_XX, K_XY, K_YY, const_diagonal=d, biased=biased)
-    return _mmd2(K_XX, K_XY, K_YY, const_diagonal=False, biased=biased)
+    return _mmd2(K_XX, K_XY, K_YY, const_diagonal=False, biased=biased, sample_weights=sample_weights)
 
 
 def mix_rbf_mmd2_and_ratio(X, Y, sigma_list, biased=True):
@@ -190,7 +220,9 @@ def mix_rbf_mmd2_and_ratio(X, Y, sigma_list, biased=True):
 ################################################################################
 
 
-def _mmd2(K_XX, K_XY, K_YY, const_diagonal=False, biased=False):
+def _mmd2(K_XX, K_XY, K_YY, const_diagonal=False, biased=False, sample_weights=None):
+    # sample_weights: batch_size * 1 -> scalar -> describe the weights that how much one x-y pair discrepancy and thus 
+    # how much they should contribute to the final loss
     m = K_XX.size(0)  # assume X, Y are same shape
 
     # Get the various sums of kernels that we'll use
@@ -207,6 +239,10 @@ def _mmd2(K_XX, K_XY, K_YY, const_diagonal=False, biased=False):
     Kt_XX_sums = K_XX.sum(dim=1) - diag_X  # batch_szie \tilde{K}_XX * e = K_XX * e - diag_X
     Kt_YY_sums = K_YY.sum(dim=1) - diag_Y  # batch_szie \tilde{K}_YY * e = K_YY * e - diag_Y
     K_XY_sums_0 = K_XY.sum(dim=0)  # batch_szie K_{XY}^T * e
+
+    if sample_weights is not None:
+        assert sample_weights.shape[0] == K_XY_sums_0.shape[0]
+        K_XY_sums_0 = torch.mul(sample_weights, K_XY_sums_0)
 
     Kt_XX_sum = Kt_XX_sums.sum()  # scalar e^T * \tilde{K}_XX * e
     Kt_YY_sum = Kt_YY_sums.sum()  # e^T * \tilde{K}_YY * e
