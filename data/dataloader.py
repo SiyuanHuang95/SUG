@@ -6,8 +6,14 @@ import h5py
 import numpy as np
 import glob
 import random
+from scipy.special import kl_div
+
 from data.data_utils import *
 from utils.train_files_spliter import split_dataset, include_dataset_full_information
+
+
+def kl_divergence_distance_(x, y):
+    return kl_div(x,y) * 0.5 + kl_div(y,x) * 0.5
 
 
 def load_dir(data_dir, name='train_files.txt'):
@@ -216,8 +222,17 @@ class UnifiedPointDG(data.Dataset):
             return weights
         elif weighting == "DLSA":
             # Constructing Balance from Imbalance: Cewu Lu
-            if q_ is not None:
+            if q_ is not None and type(q_) is not str:
                 q = q_
+
+            elif q_ is not None and type(q_) is str:
+                # use the kl between current cls distribution and uniform distribution
+                uni_dis = torch.ones([self.class_num,]) / self.class_num
+                cur_dis = [cls_num / sum(self.cls_num_counter) for cls_num in self.cls_num_counter]
+                cur_dis = torch.from_numpy(np.array(cur_dis))
+                q = kl_divergence_distance_(cur_dis, uni_dis).sum(0)
+                print(f"Apaptive Q is {q}")
+
             else:
                 q = 0.4
             sample_num_neg_power = [np.power(cls_num, -q) for cls_num in self.cls_num_counter]

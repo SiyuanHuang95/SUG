@@ -164,7 +164,7 @@ def main():
         # when gamma is zero, FL degrades to class re-weighting
         if not opt_cfg.get("CLS_WEIGHT", None):
             raise RuntimeError("When setting ClassWeighting, CLS_WEIGHT should be provided")
-        cls_weights = source_train_dataset.cls_wights(weighting=opt_cfg["CLS_WEIGHT"], q=opt_cfg.get("DLSA_Q", None))
+        cls_weights = source_train_dataset.cls_wights(weighting=opt_cfg["CLS_WEIGHT"], q_=opt_cfg.get("DLSA_Q", None))
         criterion = focal_loss(num_classes=cfg["DATASET"]["NUM_CLASS"], gamma=gamma, alpha=cls_weights)
         logger.info(f"ClassWeighting: Weights: {cls_weights}")
     else:
@@ -268,13 +268,15 @@ def main():
             feat_node_s = model(data, node_adaptation_s=True)  # shape: batch_size * 4096 -> 64 * 64
             feat_node_t = model(data_t, node_adaptation_t=True)
             # Add geometric weights
-            loss_geo_mmd = cfg["METHODS"]["MMD_WEIGHT"] * mmd.mmd_cal(label, feat_node_s, label_t, feat_node_t, cfg["METHODS"]["GEO_MMD"][0])           
+            geo_mmd_cfg = cfg["METHODS"]["GEO_MMD"][0]
+            loss_geo_mmd = geo_mmd_cfg["GEO_SCALE"] * mmd.mmd_cal(label, feat_node_s, label_t, feat_node_t, geo_mmd_cfg)           
             
-            loss_sem_mmd_1 = cfg["METHODS"]["MMD_WEIGHT"] * mmd.mmd_cal(label, sem_fea_s1, label_t, sem_fea_t1, cfg["METHODS"]["SEM_MMD"][0])
-            loss_sem_mmd_2 = cfg["METHODS"]["MMD_WEIGHT"] * mmd.mmd_cal(label, sem_fea_s1, label_t, sem_fea_t1, cfg["METHODS"]["SEM_MMD"][0])
+            sem_mmd_cfg = cfg["METHODS"]["SEM_MMD"][0]
+            loss_sem_mmd_1 = sem_mmd_cfg["SEM_SCALE"] * mmd.mmd_cal(label, sem_fea_s1, label_t, sem_fea_t1, sem_mmd_cfg)
+            loss_sem_mmd_2 = sem_mmd_cfg["SEM_SCALE"] * mmd.mmd_cal(label, sem_fea_s1, label_t, sem_fea_t1, sem_mmd_cfg)
             loss_sem_mmd = 0.5 * loss_sem_mmd_1 + 0.5 * loss_sem_mmd_2
 
-            loss = loss_cls + loss_geo_mmd + loss_sem_mmd
+            loss = cfg["METHODS"]["CLS_WEIGHT"] * loss_cls + cfg["METHODS"]["MMD_WEIGHT"] * loss_geo_mmd + cfg["METHODS"]["MMD_WEIGHT"] * loss_sem_mmd
             loss.backward()
             optimizer_dis.step()
             optimizer_g.step()

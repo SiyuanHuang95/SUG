@@ -18,7 +18,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 import numpy as np
-import open3d as o3d
+
 from sklearn.manifold import TSNE
 from sklearn.cluster import KMeans
 from scipy.special import kl_div
