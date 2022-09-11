@@ -177,6 +177,7 @@ def main():
     LR = opt_cfg["LR"]
     weight_decay = opt_cfg["WEIGHT_DECAY"]
     scaler = opt_cfg["LR_SCALER"]
+    pure_cls_epoch = cfg["METHODS"]["PURE_CLS_EPOCH"]
 
     params = [{'params': v} for k, v in model.g.named_parameters() if 'pred_offset' not in k]
 
@@ -256,45 +257,55 @@ def main():
             else:
                 loss = cfg["METHODS"]["SRC_LOSS_WEIGHT"] * loss_s + loss_adv
 
-            loss_cls = loss
-            # loss.backward()
-            # optimizer_g.step()
-            # optimizer_c.step()
-            # optimizer_g.zero_grad()
-            # optimizer_c.zero_grad()
+            loss_cls = cfg["METHODS"]["CLS_WEIGHT"] * loss
+            if epoch < pure_cls_epoch:
+                loss = loss_cls
+                loss.backward()
+                optimizer_dis.step()
+                optimizer_g.step()
+                optimizer_c.step()
+                optimizer_g.zero_grad()
+                optimizer_c.zero_grad()
+                optimizer_dis.zero_grad()
+                loss_cls_total += loss_cls.item() * data.size(0)
+            else:
 
-            # geometric info
-            # Local Alignment -> self-adaptive node: contains geometry info
-            feat_node_s = model(data, node_adaptation_s=True)  # shape: batch_size * 4096 -> 64 * 64
-            feat_node_t = model(data_t, node_adaptation_t=True)
-            # Add geometric weights
-            geo_mmd_cfg = cfg["METHODS"]["GEO_MMD"][0]
-            loss_geo_mmd = geo_mmd_cfg["GEO_SCALE"] * mmd.mmd_cal(label, feat_node_s, label_t, feat_node_t, geo_mmd_cfg)           
-            
-            sem_mmd_cfg = cfg["METHODS"]["SEM_MMD"][0]
-            loss_sem_mmd_1 = sem_mmd_cfg["SEM_SCALE"] * mmd.mmd_cal(label, sem_fea_s1, label_t, sem_fea_t1, sem_mmd_cfg)
-            loss_sem_mmd_2 = sem_mmd_cfg["SEM_SCALE"] * mmd.mmd_cal(label, sem_fea_s1, label_t, sem_fea_t1, sem_mmd_cfg)
-            loss_sem_mmd = 0.5 * loss_sem_mmd_1 + 0.5 * loss_sem_mmd_2
+                # should only activate the MMD loss after some epoch, to let the classifier gain the basic ability for classifying            
+                # ******************************** MMD alignment part *****************************************
+                # geometric info
+                # Local Alignment -> self-adaptive node: contains geometry info
+                feat_node_s = model(data, node_adaptation_s=True)  # shape: batch_size * 4096 -> 64 * 64
+                feat_node_t = model(data_t, node_adaptation_t=True)
+                # Add geometric weights
+                geo_mmd_cfg = cfg["METHODS"]["GEO_MMD"][0]
+                loss_geo_mmd =  cfg["METHODS"]["MMD_WEIGHT"] * geo_mmd_cfg["GEO_SCALE"] * mmd.mmd_cal(label, feat_node_s, label_t, feat_node_t, geo_mmd_cfg)           
+                
+                sem_mmd_cfg = cfg["METHODS"]["SEM_MMD"][0]
+                loss_sem_mmd_1 = sem_mmd_cfg["SEM_SCALE"] * mmd.mmd_cal(label, sem_fea_s1, label_t, sem_fea_t1, sem_mmd_cfg)
+                loss_sem_mmd_2 = sem_mmd_cfg["SEM_SCALE"] * mmd.mmd_cal(label, sem_fea_s2, label_t, sem_fea_t2, sem_mmd_cfg)
+                loss_sem_mmd = cfg["METHODS"]["MMD_WEIGHT"] * (0.5 * loss_sem_mmd_1 + 0.5 * loss_sem_mmd_2)
 
-            loss = cfg["METHODS"]["CLS_WEIGHT"] * loss_cls + cfg["METHODS"]["MMD_WEIGHT"] * loss_geo_mmd + cfg["METHODS"]["MMD_WEIGHT"] * loss_sem_mmd
-            loss.backward()
-            optimizer_dis.step()
-            optimizer_g.step()
-            optimizer_c.step()
-            optimizer_g.zero_grad()
-            optimizer_c.zero_grad()
-            optimizer_dis.zero_grad()
+                loss = loss_cls + loss_geo_mmd + loss_sem_mmd
+                loss.backward()
+                optimizer_dis.step()
+                optimizer_g.step()
+                optimizer_c.step()
+                optimizer_g.zero_grad()
+                optimizer_c.zero_grad()
+                optimizer_dis.zero_grad()
 
-            loss_cls_total += loss_cls.item() * data.size(0)
-            loss_adv_total += loss_adv.item() * data.size(0)
-            loss_geo_total += loss_geo_mmd.item() * data.size(0)
-            loss_sem_total += loss_sem_mmd.item() * data.size(0)
+                loss_cls_total += loss_cls.item() * data.size(0)
+                loss_adv_total += loss_adv.item() * data.size(0)
+                loss_geo_total += loss_geo_mmd.item() * data.size(0)
+                loss_sem_total += loss_sem_mmd.item() * data.size(0)
+
             data_total += data.size(0)
             data_t_total += data_t.size(0)
 
             if (batch_idx + 1) % 10 == 0:
-                logger.info(f"Train Epoch {epoch} [{data_total} {data_t_total}/{num_source_train}:]")
-                logger.info(f"loss_cls {loss_cls_total / data_total} loss_adv: {loss_adv_total / data_total} loss_geo_mmd {loss_geo_total / data_total} loss_sem_mmd {loss_sem_total / data_total}")
+                logger.info(f"Train Epoch {epoch} [{data_total} {data_t_total}/{num_source_train}:] loss_cls {loss_cls_total / data_total} ")
+                if epoch > pure_cls_epoch:
+                    logger.info(f"loss_adv: {loss_adv_total / data_total} loss_geo_mmd {loss_geo_total / data_total} loss_sem_mmd {loss_sem_total / data_total}")
 
         # Testing
         with torch.no_grad():
