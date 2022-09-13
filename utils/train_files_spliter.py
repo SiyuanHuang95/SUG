@@ -27,8 +27,17 @@ def split_dataset(dataset_type, split_config, logger, status='train'):
     size_usage = split_config["SAMPLE_RATE"] + subset_2_size
     # index_config_naming = str(datetime.datetime.now()) + split_config["split_method"] + "_" + str(
     #     split_config["sample_rate"]) + ".pkl"
-    index_config_naming = "size_" + str(size_usage) + split_config["METHOD"] + "_" + str(
-        split_config["SAMPLE_RATE"]) + ".pkl"
+    index_file_extra_tag = split_config.get("EXTRA_TAG", None)
+    if not index_file_extra_tag and index_file_extra_tag != "Datetime":
+        index_config_naming = "size_" + str(size_usage) + split_config["METHOD"] + "_" + str(
+            split_config["SAMPLE_RATE"]) + "_" + str(index_file_extra_tag) + ".pkl"
+    elif not index_file_extra_tag and index_file_extra_tag == "Datetime":
+        index_config_naming = "size_" + str(size_usage) + split_config["METHOD"] + "_" + str(
+            split_config["SAMPLE_RATE"]) + "_" + str(datetime.datetime.now()) + ".pkl"
+    else:
+        index_config_naming = "size_" + str(size_usage) + split_config["METHOD"] + "_" + str(
+            split_config["SAMPLE_RATE"]) +  ".pkl"
+    
     index_file_storage = os.path.join(dataset_path, index_config_naming)
     if os.path.exists(index_file_storage) and split_config["RELOAD"]:
         logger.info(f"Direct load the indexing history from {index_file_storage}")

@@ -304,7 +304,7 @@ def main():
 
             if (batch_idx + 1) % 10 == 0:
                 logger.info(f"Train Epoch {epoch} [{data_total} {data_t_total}/{num_source_train}:] loss_cls {loss_cls_total / data_total} ")
-                if epoch > pure_cls_epoch:
+                if epoch >= pure_cls_epoch:
                     logger.info(f"loss_adv: {loss_adv_total / data_total} loss_geo_mmd {loss_geo_total / data_total} loss_sem_mmd {loss_sem_total / data_total}")
 
         # Testing
