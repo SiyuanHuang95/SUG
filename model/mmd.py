@@ -21,7 +21,7 @@ def mmd_cal(label_s, feat_s, label_t, feat_t, args:dict, data_s=None, data_t=Non
     # Currently, lets use SOFT_MMD 
     sample_weights = None
     if data_s is not None:
-        sample_weights = cal_sample_weights(data_s, data_t, args)
+        sample_weights = cal_sample_weights(data_s, data_t, args, label_s=label_s, label_t=label_t)
     if args["NAME"] == "SOFT_MMD":
         return soft_mmd(label_s, feat_s, label_t, feat_t, float(args["LABEL_SCALE"]), sample_weights=sample_weights)
     elif args["NAME"] == "HARD_MMD":
@@ -36,7 +36,7 @@ def mmd_cal(label_s, feat_s, label_t, feat_t, args:dict, data_s=None, data_t=Non
 
 def cal_sample_weights(data_s, data_t, args, label_s=None, label_t=None):
     if args.get("GEO_WEIGHTS", None):
-        sample_weights = geometric_weights(data_s, data_t, args["GEO_WEIGHTS"])
+        sample_weights = geometric_weights(data_s, data_t, weighting=args["GEO_WEIGHTS"])
     elif args.get("ENTROPY_WEIGHTS", None):
         sample_weights = entropy_weights(data_s, data_t, weighting=args["ENTROPY_WEIGHTS"])
     elif args.get("SEM_WEIGHTS", None):
@@ -56,7 +56,7 @@ def soft_mmd(label_s, feat_s, label_t, feat_t, label_weight, sample_weights=None
     feat_s_label = torch.cat((feat_s, label_s_one_hot * label_weight), dim=1)
     feat_t_label = torch.cat((feat_t, label_t_one_hot * label_weight), dim=1)
 
-    return mix_rbf_mmd2(feat_s_label, feat_t_label, sigma_list)
+    return mix_rbf_mmd2(feat_s_label, feat_t_label, sigma_list, sample_weights=sample_weights)
 
 
 def hard_mmd(label_s, feat_s, label_t, feat_t):
@@ -100,21 +100,24 @@ def geometric_weights(pc_s, pc_t, metric="chamfer_distance", weighting="none"):
 
     distance = criteria(pc_1, pc_2)
     weights = distance2weights(distances=distance, method=weighting)
-    return torch.tensor(np.array(weights).reshape(1, -1))
+    return weights.reshape(1, -1)
 
 
 def prob_weights_soft(pred_s, pred_t, label_s, label_t, label_weight, weighting="mean2one"):
     assert label_weight < 1, "For Entropy, Label weight should be less than one"
 
+    # need to convert logits to prob with softmax firstly, in order to use KL
+    pred_s_ = torch.softmax(pred_s.detach().cpu(), dim=1)
     label_s_one_hot = create_one_hot_labels(label_s)
-    pred_s_label = torch.cat((pred_s.view(-1, 10), label_s_one_hot * label_weight), dim=1)
+    pred_s_label = torch.cat((pred_s_.view(-1, 10), label_s_one_hot * label_weight), dim=1)
 
+    pred_t_ = torch.softmax(pred_t.detach().cpu(), dim=1)
     label_t_one_hot = create_one_hot_labels(label_t)
-    pred_t_label = torch.cat((pred_t.view(-1, 10), label_t_one_hot * label_weight), dim=1)
+    pred_t_label = torch.cat((pred_t_.view(-1, 10), label_t_one_hot * label_weight), dim=1)
 
     distance = kl_divergence_distance(normalized(pred_s_label), normalized(pred_t_label)).sum(1)
     weights = distance2weights(distances=distance, method=weighting)
-    return torch.tensor(np.array(weights).reshape(1, -1))
+    return weights.reshape(1, -1)
 
 
 def normalized(vec):
@@ -166,9 +169,9 @@ def distance2weights(distances, method="naive_inverse"):
 
     elif method == "mean2one":
         # the mean to be one -> mean valued-pair is same to naive mmd
-        scale_ = (1 /dis.mean()).type(torch.int)
-        weights = distance * scale_
-    return weights
+        scale_ = (1 /distances.mean()).type(torch.int)
+        weights = distances * scale_
+    return weights.reshape(-1, 1).squeeze()
 
 # Consider linear time MMD with a linear kernel:
 # K(f(x), f(y)) = f(x)^Tf(y)
@@ -261,6 +264,7 @@ def _mmd2(K_XX, K_XY, K_YY, const_diagonal=False, biased=False, sample_weights=N
     K_XY_sums_0 = K_XY.sum(dim=0)  # batch_szie K_{XY}^T * e
 
     if sample_weights is not None:
+        sample_weights = sample_weights.squeeze().to(device='cuda')
         assert sample_weights.shape[0] == K_XY_sums_0.shape[0]
         K_XY_sums_0 = torch.mul(sample_weights, K_XY_sums_0)
 
