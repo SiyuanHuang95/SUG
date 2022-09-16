@@ -236,7 +236,10 @@ def main():
 
             # Senmantic MMD loss
             pred_s1, pred_s2, sem_fea_s1, sem_fea_s2 = model(data, semantic_adaption=True)
-            pred_t1, pred_t2, sem_fea_t1, sem_fea_t2 = model(data_t, semantic_adaption=True)
+            if cfg["METHODS"].get("GRL", None):
+                pred_t1, pred_t2, sem_fea_t1, sem_fea_t2 = model(data_t, semantic_adaption=True, constant=cons, adaptation=True)
+            else:
+                pred_t1, pred_t2, sem_fea_t1, sem_fea_t2 = model(data_t, semantic_adaption=True)
             # no need for GRL now
             # sem_fea_s1:64 * 256
 
@@ -258,7 +261,7 @@ def main():
                 loss = cfg["METHODS"]["SRC_LOSS_WEIGHT"] * loss_s + loss_adv
 
             loss_cls = cfg["METHODS"]["CLS_WEIGHT"] * loss
-            if epoch < pure_cls_epoch:
+            if epoch < pure_cls_epoch or cfg["METHODS"]["MMD_WEIGHT"] <= 0:
                 loss = loss_cls
                 loss.backward()
                 optimizer_dis.step()
@@ -281,11 +284,17 @@ def main():
                 loss_geo_mmd =  cfg["METHODS"]["MMD_WEIGHT"] * geo_mmd_cfg["GEO_SCALE"] * mmd.mmd_cal(label, feat_node_s, label_t, feat_node_t, geo_mmd_cfg, data_s=data, data_t=data_t)           
                 
                 sem_mmd_cfg = cfg["METHODS"]["SEM_MMD"][0]
-                loss_sem_mmd_1 = sem_mmd_cfg["SEM_SCALE"] * mmd.mmd_cal(label, sem_fea_s1, label_t, sem_fea_t1, sem_mmd_cfg, data_s=pred_s1, data_t=pred_t1)
-                loss_sem_mmd_2 = sem_mmd_cfg["SEM_SCALE"] * mmd.mmd_cal(label, sem_fea_s2, label_t, sem_fea_t2, sem_mmd_cfg, data_s=pred_s2, data_t=pred_t2)
-                loss_sem_mmd = cfg["METHODS"]["MMD_WEIGHT"] * (0.5 * loss_sem_mmd_1 + 0.5 * loss_sem_mmd_2)
+                loss_sem_mmd = None
+                if  sem_mmd_cfg["SEM_SCALE"] > 0:
+                    loss_sem_mmd_1 = sem_mmd_cfg["SEM_SCALE"] * mmd.mmd_cal(label, sem_fea_s1, label_t, sem_fea_t1, sem_mmd_cfg, data_s=pred_s1, data_t=pred_t1)
+                    loss_sem_mmd_2 = sem_mmd_cfg["SEM_SCALE"] * mmd.mmd_cal(label, sem_fea_s2, label_t, sem_fea_t2, sem_mmd_cfg, data_s=pred_s2, data_t=pred_t2)
+                    loss_sem_mmd = cfg["METHODS"]["MMD_WEIGHT"] * (0.5 * loss_sem_mmd_1 + 0.5 * loss_sem_mmd_2)
 
-                loss = loss_cls + loss_geo_mmd + loss_sem_mmd
+                if loss_sem_mmd is not None:
+                    loss = loss_cls + loss_geo_mmd + loss_sem_mmd
+                else:
+                    loss = loss_cls + loss_geo_mmd
+
                 loss.backward()
                 optimizer_dis.step()
                 optimizer_g.step()
@@ -294,13 +303,16 @@ def main():
                 optimizer_c.zero_grad()
                 optimizer_dis.zero_grad()
 
-                loss_cls_total += loss_cls.item() * data.size(0)
-                loss_adv_total += loss_adv.item() * data.size(0)
+                
                 loss_geo_total += loss_geo_mmd.item() * data.size(0)
-                loss_sem_total += loss_sem_mmd.item() * data.size(0)
+                if loss_sem_mmd is not None:
+                    loss_sem_total += loss_sem_mmd.item() * data.size(0)
 
             data_total += data.size(0)
             data_t_total += data_t.size(0)
+
+            loss_cls_total += loss_cls.item() * data.size(0)
+            loss_adv_total += loss_adv.item() * data.size(0)
 
             if (batch_idx + 1) % 10 == 0:
                 logger.info(f"Train Epoch {epoch} [{data_total} {data_t_total}/{num_source_train}:] loss_cls {loss_cls_total / data_total} ")

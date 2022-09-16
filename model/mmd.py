@@ -5,6 +5,7 @@ from ast import arg
 from copy import copy, deepcopy
 from dis import dis
 import pdb
+from ssl import ALERT_DESCRIPTION_BAD_CERTIFICATE_STATUS_RESPONSE
 from turtle import distance
 import torch
 import numpy as np
@@ -20,7 +21,8 @@ sigma_list = [0.01, 0.1, 1, 10, 100]
 def mmd_cal(label_s, feat_s, label_t, feat_t, args:dict, data_s=None, data_t=None):
     # Currently, lets use SOFT_MMD 
     sample_weights = None
-    if data_s is not None:
+    sample_weights_flag = args.get("GEO_WEIGHTS", None) or args.get("SEM_WEIGHTS", None)
+    if data_s is not None and sample_weights_flag:
         sample_weights = cal_sample_weights(data_s, data_t, args, label_s=label_s, label_t=label_t)
     if args["NAME"] == "SOFT_MMD":
         return soft_mmd(label_s, feat_s, label_t, feat_t, float(args["LABEL_SCALE"]), sample_weights=sample_weights)
