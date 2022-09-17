@@ -1,0 +1,65 @@
+EXPERIMENT: DG_exp
+EXTRA_TAG: DG_Loss_ShapeNet
+DATA_ROOT: /mnt/lustre/huangsiyuan/data/PointDA_data
+LOGS_ROOT: /mnt/lustre/huangsiyuan/data/logs
+
+DATASET:
+    NUM_CLASS: 10
+
+
+MODEL: MDA
+# alignment model
+
+METHODS:
+    MMD_WEIGHT: 1.0
+    # the weight of total MMD loss
+    CLS_WEIGHT: 1.0
+    # the weight of total classification loss
+    GEO_MMD:
+        - NAME: SOFT_MMD
+          LABEL_SCALE: 50
+          # how one-hot vector influence the feature vector mmd
+          GEO_WEIGHTS: mean2one
+          GEO_SCALE: 1
+
+    SEM_MMD:
+        - NAME: SOFT_MMD
+          LABEL_SCALE: 5
+          SEM_WEIGHTS: mean2one
+          LABEL_WEIGHT: 0.5
+          SEM_SCALE: 1
+
+    CLASS_MMD: 
+        - NAME: SOFT_MMD
+          LABEL_SCALE: 1.0
+    # Use MMD loss only within same class
+    TARGET_LOSS: 1.0
+    # the weight of target split cls loss
+    SRC_LOSS_WEIGHT: 1.0
+    CLASS_BALANCE: False
+    # Sample the batch with class-balanced
+    ADV_WEIGHT: 0.0
+    # two heads of the model output similar
+    PURE_CLS_EPOCH: 0
+    # Epoches that no MMD worked for alignment
+
+DATASET_SPLITTER:
+    METHOD: Random
+    SUBSET_FULLSIZE: False
+    SAMPLE_RATE: 0.5
+    TRAIN_BASE: 1
+    RELOAD: True
+
+
+OPTIMIZATION:
+    NUM_EPOCHES: 200
+
+    LR: 0.0001
+    LR_SCALER: 1.0
+    WEIGHT_DECAY: 0.0005
+    MOMENTUM: 0.9
+
+    CLS_LOSS: ClassWeighting
+    CLS_WEIGHT: DLSA
+    DLSA_Q: 0.1
+    # DLSA_Q: 0.4
