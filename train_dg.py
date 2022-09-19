@@ -146,7 +146,7 @@ def main():
     # AssertionError: daemonic processes are not allowed to have children
 
     # Model
-    model = mM.Net_MDA()
+    model = mM.Net_MDA(model_name=cfg.get("Model", "Pointnet"))
     logger.info(model)
     model = model.to(device=device)
 
@@ -235,6 +235,7 @@ def main():
             
 
             # Senmantic MMD loss
+            # data: 64 * 3 * 1024 * 1
             pred_s1, pred_s2, sem_fea_s1, sem_fea_s2 = model(data, semantic_adaption=True)
             if cfg["METHODS"].get("GRL", None):
                 pred_t1, pred_t2, sem_fea_t1, sem_fea_t2 = model(data_t, semantic_adaption=True, constant=cons, adaptation=True)

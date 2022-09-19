@@ -1,9 +1,10 @@
 from sqlite3 import adapt
 from model.model_utils import *
-import pdb
-import os
-import torch.nn.functional as F
+from model.pointnet2_utils import PointNetSetAbstraction
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
 # Channel Attention
 class  CALayer(nn.Module):
@@ -26,7 +27,6 @@ class  CALayer(nn.Module):
 
         return y
 
-
 # Grad Reversal
 class GradReverse(torch.autograd.Function):
     def __init__(self, lambd):
@@ -43,6 +43,42 @@ class GradReverse(torch.autograd.Function):
 def grad_reverse(x, lambd=1.0):
     return GradReverse(lambd).forward(x)
 
+class Pointnet2_g(nn.Module):
+    def __init__(self, normal_channel=False):
+        super(Pointnet2_g, self).__init__()
+        in_channel = 6 if normal_channel else 3
+        self.normal_channel = normal_channel
+        self.num_class = 10
+        self.sa1 = PointNetSetAbstraction(npoint=512, radius=0.2, nsample=32, in_channel=in_channel, mlp=[64, 64, 128], group_all=False)
+        # self.sa1 = PointNetSetAbstraction(npoint=512, radius=0.2, nsample=32, in_channel=in_channel, mlp=[64, 64], group_all=False)
+        # self.adapt_layer_off = adapt_layer_off() # 64 -> 128 / input: [64, 3, 64, 64]
+        self.sa2 = PointNetSetAbstraction(npoint=128, radius=0.4, nsample=64, in_channel=128 + 3, mlp=[128, 128, 256], group_all=False)
+        self.sa3 = PointNetSetAbstraction(npoint=None, radius=None, nsample=None, in_channel=256 + 3, mlp=[256, 512, 1024], group_all=True)
+
+    def forward(self, xyz, node=False):
+        xyz = xyz.squeeze(-1) # 64 * 3 * 1024
+        B = xyz.shape[0]
+        if self.normal_channel:
+            norm = xyz[:, 3:, :]
+            xyz = xyz[:, :3, :]
+        else:
+            norm = None
+        # x_loc = xyz.squeeze(-1)
+        l1_xyz, l1_points, node_fea = self.sa1(xyz, norm, adapt=True)
+        # l1_xyz: 64 * 3 * 512  l1_points: 64 * 128 * 512
+        # node_fea: 64 * 64 * 512
+        l2_xyz, l2_points = self.sa2(l1_xyz, l1_points)
+        # 64 * 3 * 128 // 64 * 256 * 128
+        l3_xyz, l3_points = self.sa3(l2_xyz, l2_points)
+        # 64 * 3 * 1 // 64 * 1024 * 1
+        x = l3_points.view(B, 1024)
+        node_fea = node_fea.permute(0, 2, 1).view(B, 512, 64, 1)
+        node_fea = self.channel_redu(node_fea).view(B, 64, 64, 1)
+
+        if node:
+            return x, node_fea, None
+        else:
+            return x, node_fea
 
 # Generator
 class Pointnet_g(nn.Module):
@@ -106,6 +142,7 @@ class Pointnet_c(nn.Module):
         # classifier in PointNet
         self.mlp1 = fc_layer(1024, 512, bn=False)
         self.dropout1 = nn.Dropout2d(p=0.7)
+        # should check 0.7 -> 0.4?
         self.mlp2 = fc_layer(512, 256, bn=False)
         self.dropout2 = nn.Dropout2d(p=0.7)
         self.mlp3 = nn.Linear(256, num_class)
@@ -130,10 +167,13 @@ class Net_MDA(nn.Module):
         super(Net_MDA, self).__init__()
         if model_name == 'Pointnet':
             self.g = Pointnet_g()
-            self.attention_s = CALayer(64 * 64)
-            self.attention_t = CALayer(64 * 64)
-            self.c1 = Pointnet_c()
-            self.c2 = Pointnet_c()
+        elif model_name == "Pointnet2":
+            self.g = Pointnet2_g()
+
+        self.attention_s = CALayer(64 * 64)
+        self.attention_t = CALayer(64 * 64)
+        self.c1 = Pointnet_c()
+        self.c2 = Pointnet_c()
 
     def forward(self, x, constant=1, adaptation=False, node_vis=False, mid_feat=False, node_adaptation_s=False,
                 node_adaptation_t=False, semantic_adaption=False):
@@ -151,12 +191,12 @@ class Net_MDA(nn.Module):
 
         if node_adaptation_s:
             # source domain sa node feat
-            feat_node = feat_ori.view(batch_size, -1)
+            feat_node = feat_ori.contiguous().view(batch_size, -1)
             feat_node_s = self.attention_s(feat_node.unsqueeze(2).unsqueeze(3))
             return feat_node_s
         elif node_adaptation_t:
             # target domain sa node feat
-            feat_node = feat_ori.view(batch_size, -1)
+            feat_node = feat_ori.contiguous().view(batch_size, -1)
             feat_node_t = self.attention_t(feat_node.unsqueeze(2).unsqueeze(3))
             return feat_node_t
 

@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from model.model_pointnet import Pointnet_cls as Pointnet_cls
+from model.model_pointnet import Pointnet_cls, Pointnet2_cls
 from data.dataloader import Modelnet40_data, Shapenet_data, Scannet_data_h5
 from data.dataloader import create_single_dataset
 
@@ -66,8 +66,12 @@ def main():
         num_source_train, num_source_test, num_target_test1, num_target_test2))
     logger.info(f'batch_size: {BATCH_SIZE}')
 
+    num_cls = cfg["DATASET"]["NUM_CLASS"]
     # Model
-    model = Pointnet_cls()
+    if cfg.get("Model", "PointNet") == "PointNet2":
+        model = Pointnet2_cls(num_class=num_cls)
+    else:
+        model = Pointnet_cls(num_class=num_cls)
     model = model.to(device=device)
     criterion = nn.CrossEntropyLoss()
     criterion = criterion.to(device=device)
