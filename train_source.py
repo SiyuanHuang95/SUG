@@ -92,8 +92,8 @@ def main():
     # best_target_acc_epoch + best_target_acc
 
     for epoch in range(max_epoch_num):
+        since_e = time.time()
         lr_schedule.step(epoch=epoch)
-        print(lr_schedule.get_lr())
         writer.add_scalar('lr', lr_schedule.get_lr(), epoch)
 
         model.train()
@@ -153,6 +153,10 @@ def main():
                 best_test_acc[eval_dataset][0] = eval_result["best_target_acc_epoch"]
                 writer_item = 'acc/' + eval_result["dataset"] + "_test_acc"
                 writer.add_scalar(writer_item, eval_result["best_target_acc"], epoch)
+        
+    time_pass_e = time.time() - since_e
+    logger.info('The {} epoch takes {:.0f}m {:.0f}s'.format(epoch, time_pass_e // 60, time_pass_e % 60))
+    logger.info('****************Finished One Epoch****************')
             
 
 if __name__ == '__main__':
