@@ -193,7 +193,7 @@ def main():
                                lr=LR * scaler, weight_decay=weight_decay)
     lr_schedule_dis = optim.lr_scheduler.CosineAnnealingLR(optimizer_dis, T_max=max_epoch_num + remain_epoch)
 
-    cls_eval = opt_cfg.get("CLS_EVAL", False)
+    cls_eval = opt_cfg.get("CLS_EVAL", True)
 
     for epoch in range(max_epoch_num):
         since_e = time.time()

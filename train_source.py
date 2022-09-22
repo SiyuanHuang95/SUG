@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from model.model_pointnet import Pointnet_cls, Pointnet2_cls
+from model.model_pointnet import Pointnet_cls, Pointnet2_cls, DGCNN
 from data.dataloader import Modelnet40_data, Shapenet_data, Scannet_data_h5
 from data.dataloader import create_single_dataset
 
@@ -70,6 +70,8 @@ def main():
     # Model
     if cfg.get("Model", "PointNet") == "PointNet2":
         model = Pointnet2_cls(num_class=num_cls)
+    elif cfg.get("Model", "PointNet") == "DGCNN":
+        model = DGCNN()
     else:
         model = Pointnet_cls(num_class=num_cls)
     model = model.to(device=device)
@@ -154,9 +156,9 @@ def main():
                 writer_item = 'acc/' + eval_result["dataset"] + "_test_acc"
                 writer.add_scalar(writer_item, eval_result["best_target_acc"], epoch)
         
-    time_pass_e = time.time() - since_e
-    logger.info('The {} epoch takes {:.0f}m {:.0f}s'.format(epoch, time_pass_e // 60, time_pass_e % 60))
-    logger.info('****************Finished One Epoch****************')
+        time_pass_e = time.time() - since_e
+        logger.info('The {} epoch takes {:.0f}m {:.0f}s'.format(epoch, time_pass_e // 60, time_pass_e % 60))
+        logger.info('****************Finished One Epoch****************')
             
 
 if __name__ == '__main__':

@@ -43,6 +43,77 @@ class GradReverse(torch.autograd.Function):
 def grad_reverse(x, lambd=1.0):
     return GradReverse(lambd).forward(x)
 
+K = 20
+
+class DGCNN(nn.Module):
+    def __init__(self):
+        super(DGCNN, self).__init__()
+        self.k = K
+
+        self.input_transform_net = transform_net(6, 3)
+
+        self.conv1 = conv_2d(6, 64, kernel=1, bias=False, activation='leakyrelu')
+        self.conv2 = conv_2d(64 * 2, 64, kernel=1, bias=False, activation='leakyrelu')
+        self.conv3 = conv_2d(64 * 2, 128, kernel=1, bias=False, activation='leakyrelu')
+        self.conv4 = conv_2d(128 * 2, 256, kernel=1, bias=False, activation='leakyrelu')
+        num_f_prev = 64 + 64 + 128 + 256
+
+        self.bn5 = nn.BatchNorm1d(512)
+        self.conv5 = nn.Conv1d(num_f_prev, 512, kernel_size=1, bias=False)
+        self.node_fea_adapt = adapt_layer_off()
+        self.conv1d = nn.Conv1d(128, 64, 1)
+
+        self.dim_redu = nn.MaxPool1d(3, stride=16) # B * 64 *1024 -> B * 64 * 64
+    def forward(self, x, node=False):
+        x_loc = x.squeeze(-1)
+        batch_size = x.size(0)
+        num_points = x.size(2)
+        cls_logits = {}
+
+        # returns a tensor of (batch_size, 6, #points, #neighboors)
+        # interpretation: each point is represented by 20 NN, each of size 6
+        # x0 = get_graph_feature(x, self.args, k=self.k)  # x0: [b, 6, 1024, 20]
+        # align to a canonical space (e.g., apply rotation such that all inputs will have the same rotation)
+        # transformd_x0 = self.input_transform_net(x0)  # transformd_x0: [3, 3]
+        # x = torch.matmul(transformd_x0, x)
+
+        # returns a tensor of (batch_size, 6, #points, #neighboors)
+        # interpretation: each point is represented by 20 NN, each of size 6
+        x = get_graph_feature(x, k=self.k)  # x: [b, 6, 1024, 20]
+        # process point and inflate it from 6 to e.g., 64
+        x = self.conv1(x)  # x: [b, 64, 1024, 20]
+        # per each feature (from e.g., 64) take the max value from the representative vectors
+        # Conceptually this means taking the neighbor that gives the highest feature value.
+        # returns a tensor of size e.g., (batch_size, 64, #points)
+        x1 = x.max(dim=-1, keepdim=False)[0] # 64 * 64 * 1024
+
+        x = get_graph_feature(x1, k=self.k)  # 64 * 64 * 1024 *20
+        x = self.conv2(x)
+        x2 = x.max(dim=-1, keepdim=False)[0] # 64 * 64 * 1024
+
+        x_, node_fea, node_off = self.node_fea_adapt(x2.view(batch_size, 64, 1024, 1), x_loc)
+        x2 = self.conv1d(x_.squeeze(-1))
+
+        x = get_graph_feature(x2, k=self.k)
+        x = self.conv3(x)
+        x3 = x.max(dim=-1, keepdim=False)[0]
+
+        x = get_graph_feature(x3, k=self.k)
+        x = self.conv4(x)
+        x4 = x.max(dim=-1, keepdim=False)[0]
+
+        x_cat = torch.cat((x1, x2, x3, x4), dim=1)
+        x5 = self.conv5(x_cat)  # [b, 1024, 1024]
+        x5 = F.leaky_relu(self.bn5(x5), negative_slope=0.2)
+        x1 = F.adaptive_max_pool1d(x5, 1).view(batch_size, -1)
+        x2 = F.adaptive_avg_pool1d(x5, 1).view(batch_size, -1)
+        x = torch.cat((x1, x2), 1)
+
+        if node:
+            return x, node_fea, None
+        else:
+            return x, node_fea
+
 class Pointnet2_g(nn.Module):
     def __init__(self, normal_channel=False):
         super(Pointnet2_g, self).__init__()
@@ -115,7 +186,7 @@ class Pointnet_g(nn.Module):
         x = torch.bmm(x, transform) 
         x = x.unsqueeze(3)
         x = x.transpose(2, 1)
-
+        # x: 64*64*1024 *1  x_loc: 64*3*1024
         x, node_fea, node_off = self.conv3(x, x_loc)
         # node_off: 64 * 3 * 64 node_fea: 64 * 64* 64 *1
         # x = [B, dim, num_node, 1]/[64, 128, 1024, 1]; x_loc = [B, xyz, num_node] / [64, 3, 1024]
@@ -136,17 +207,25 @@ class Pointnet_g(nn.Module):
 
 # Classifier
 class Pointnet_c(nn.Module):
-    def __init__(self, num_class=10):
+    def __init__(self, num_class=10, dgcnn_flag=False):
         super(Pointnet_c, self).__init__()
         # classifier in PointDAN
         # self.fc = nn.Linear(1024, num_class)
         
+        if dgcnn_flag:
+            activate = 'leakyrelu' 
+            bias = True
+        else:
+            activate = 'relu'
+            bias = False
+
         # classifier in PointNet
-        self.mlp1 = fc_layer(1024, 512, bn=False)
-        self.dropout1 = nn.Dropout2d(p=0.7)
+        # bn On or Off?
+        self.mlp1 = fc_layer(1024, 512, bn=True, activation=activate, bias=bias)
+        self.dropout1 = nn.Dropout2d(p=0.4)
         # should check 0.7 -> 0.4?
-        self.mlp2 = fc_layer(512, 256, bn=False)
-        self.dropout2 = nn.Dropout2d(p=0.7)
+        self.mlp2 = fc_layer(512, 256, bn=True, activation=activate, bias=True)
+        self.dropout2 = nn.Dropout2d(p=0.4)
         self.mlp3 = nn.Linear(256, num_class)
 
     def forward(self, x, adapt=False):
@@ -167,15 +246,21 @@ class Pointnet_c(nn.Module):
 class Net_MDA(nn.Module):
     def __init__(self, model_name='Pointnet'):
         super(Net_MDA, self).__init__()
+        self.dgcnn_flag = False
         if model_name == 'Pointnet':
             self.g = Pointnet_g()
         elif model_name == "Pointnet2":
             self.g = Pointnet2_g()
+        elif model_name == "DGCNN":
+            self.g = DGCNN()
+            self.dgcnn_flag = True
+        else:
+            raise NotImplementedError("Unsupported model name")
 
         self.attention_s = CALayer(64 * 64)
         self.attention_t = CALayer(64 * 64)
-        self.c1 = Pointnet_c()
-        self.c2 = Pointnet_c()
+        self.c1 = Pointnet_c(dgcnn_flag=self.dgcnn_flag)
+        self.c2 = Pointnet_c(dgcnn_flag=self.dgcnn_flag)
 
     def forward(self, x, constant=1, adaptation=False, node_vis=False, mid_feat=False, node_adaptation_s=False,
                 node_adaptation_t=False, semantic_adaption=False):
