@@ -12,7 +12,7 @@ class conv_2d(nn.Module):
             self.conv = nn.Sequential(
                 nn.Conv2d(in_ch, out_ch, kernel_size=kernel, bias=bias),
                 nn.BatchNorm2d(out_ch),
-                nn.ReLU(inplace=True)
+                nn.ReLU(inplace=False)
             )
         elif activation == 'tanh':
             self.conv = nn.Sequential(
@@ -36,9 +36,9 @@ class fc_layer(nn.Module):
     def __init__(self, in_ch, out_ch, bn=True, activation='leakyrelu', bias=False):
         super(fc_layer, self).__init__()
         if activation == 'relu':
-            self.ac = nn.ReLU(inplace=True)
+            self.ac = nn.ReLU(inplace=False)
         elif activation == 'leakyrelu':
-            self.ac = nn.LeakyReLU(negative_slope=0.2, inplace=True)
+            self.ac = nn.LeakyReLU(negative_slope=0.2, inplace=False)
         if bn:
             self.fc = nn.Sequential(
                 nn.Linear(in_ch, out_ch, bias=bias),

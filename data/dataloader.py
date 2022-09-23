@@ -1,16 +1,72 @@
 import torch
 import torch.utils.data as data
 import os
-import sys
 import h5py
 import numpy as np
 import glob
-import random
 from scipy.special import kl_div
+from functools import partial
+from torch.utils.data import DataLoader
 
 from data.data_utils import *
 from utils.train_files_spliter import split_dataset, include_dataset_full_information
+from torch.utils.data import DistributedSampler as _DistributedSampler
+from utils import common_utils
 
+class DistributedSampler(_DistributedSampler):
+
+    def __init__(self, dataset, num_replicas=None, rank=None, shuffle=True):
+        super().__init__(dataset, num_replicas=num_replicas, rank=rank)
+        self.shuffle = shuffle
+
+    def __iter__(self):
+        if self.shuffle:
+            g = torch.Generator()
+            g.manual_seed(self.epoch)
+            indices = torch.randperm(len(self.dataset), generator=g).tolist()
+        else:
+            indices = torch.arange(len(self.dataset)).tolist()
+
+        indices += indices[:(self.total_size - len(indices))]
+        assert len(indices) == self.total_size
+
+        indices = indices[self.rank:self.total_size:self.num_replicas]
+        assert len(indices) == self.num_samples
+
+        return iter(indices)
+
+
+def build_dataloader(dataset, batch_size, dist, workers=4, seed=None,
+                     training=True, merge_all_iters_to_one_epoch=False, total_epochs=0):
+
+    # dataset = __all__[dataset_cfg.DATASET](
+    #     dataset_cfg=dataset_cfg,
+    #     class_names=class_names,
+    #     root_path=root_path,
+    #     training=training,
+    #     logger=logger,
+    # )
+
+    if merge_all_iters_to_one_epoch:
+        assert hasattr(dataset, 'merge_all_iters_to_one_epoch')
+        dataset.merge_all_iters_to_one_epoch(merge=True, epochs=total_epochs)
+
+    if dist:
+        if training:
+            sampler = torch.utils.data.distributed.DistributedSampler(dataset)
+        else:
+            rank, world_size = common_utils.get_dist_info()
+            sampler = DistributedSampler(dataset, world_size, rank, shuffle=False)
+    else:
+        sampler = None
+    
+    dataloader = DataLoader(
+        dataset, batch_size=batch_size, pin_memory=True, num_workers=workers,
+        shuffle=(sampler is None) and training,
+        drop_last=False, sampler=sampler, timeout=0, worker_init_fn=partial(common_utils.worker_init_fn, seed=seed)
+    )
+
+    return dataset, dataloader, sampler
 
 def kl_divergence_distance_(x, y):
     return kl_div(x,y) * 0.5 + kl_div(y,x) * 0.5

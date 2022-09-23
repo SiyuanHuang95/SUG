@@ -13,7 +13,7 @@ class  CALayer(nn.Module):
         # feature channel downscale and upscale --> channel weight
         self.conv_du = nn.Sequential(
             nn.Conv2d(channel, channel // reduction, 1, padding=0, bias=True),
-            nn.ReLU(inplace=True),
+            nn.ReLU(inplace=False),
             nn.Conv2d(channel // reduction, channel, 1, padding=0, bias=True),
             nn.Sigmoid()
         )
@@ -127,6 +127,7 @@ class Pointnet2_g(nn.Module):
         self.sa3 = PointNetSetAbstraction(npoint=None, radius=None, nsample=None, in_channel=256 + 3, mlp=[256, 512, 1024], group_all=True)
 
         self.channel_redu = nn.Conv2d(512, 64, 1)
+        self.dim_redu = nn.MaxPool1d(3, stride=8) # B * 64 * 512 -> B * 64 * 64
         
     def forward(self, xyz, node=False):
         xyz = xyz.squeeze(-1) # 64 * 3 * 1024
