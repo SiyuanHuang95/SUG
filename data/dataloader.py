@@ -63,7 +63,7 @@ def build_dataloader(dataset, batch_size, dist, workers=4, seed=None,
     dataloader = DataLoader(
         dataset, batch_size=batch_size, pin_memory=True, num_workers=workers,
         shuffle=(sampler is None) and training,
-        drop_last=False, sampler=sampler, timeout=0, worker_init_fn=partial(common_utils.worker_init_fn, seed=seed)
+        drop_last=True, sampler=sampler, timeout=0, worker_init_fn=partial(common_utils.worker_init_fn, seed=seed)
     )
 
     return dataset, dataloader, sampler
