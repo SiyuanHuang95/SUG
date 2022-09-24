@@ -149,8 +149,8 @@ class Pointnet2_g(nn.Module):
         l3_xyz, l3_points = self.sa3(l2_xyz, l2_points)
         # 64 * 3 * 1 // 64 * 1024 * 1
         x = l3_points.view(B, 1024)
-        node_fea = node_fea.permute(0, 2, 1).view(B, 512, 64, 1)
-        node_fea = self.channel_redu(node_fea).view(B, 64, 64, 1)
+        
+        node_fea = self.dim_redu(node_fea).view(B, 64, 64, 1)
 
         if node:
             return x, node_fea, None
@@ -217,8 +217,8 @@ class Ponintnet2MSG_g(nn.Module):
         l_xyz, l_features = [xyz], [features]
         for i in range(len(self.SA_modules)):
             li_xyz, li_features = self.SA_modules[i](l_xyz[i], l_features[i])
-            l_xyz.append(li_xyz)
-            l_features.append(li_features)
+            l_xyz.append(li_xyz) # [[63 * 3 * 3]]  
+            l_features.append(li_features)  # 64 * 1021 * 3
 
         for i in range(-1, -(len(self.FP_modules) + 1), -1):
             l_features[i - 1] = self.FP_modules[i](
@@ -325,7 +325,7 @@ class Net_MDA(nn.Module):
         if model_name == 'Pointnet':
             self.g = Pointnet_g()
         elif model_name == "Pointnet2":
-            self.g = Ponintnet2MSG_g()
+            self.g = Pointnet2_g()
         elif model_name == "DGCNN":
             self.g = DGCNN()
             self.dgcnn_flag = True

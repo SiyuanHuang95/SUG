@@ -23,7 +23,7 @@ def main():
 
     device = 'cuda'
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
-    BATCH_SIZE = args.batchsize * len(args.gpu.split(','))
+    BATCH_SIZE = args.batch_size * len(args.gpu.split(','))
 
     output_dir, ckpt_dir = exp_log_folder_creator(cfg, extra_tag=args.source)
     log_name = 'log_train_source%s.txt' % datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
