@@ -303,6 +303,10 @@ class UnifiedPointDG(data.Dataset):
         # TODO should do normal once, to speed-up the whole process
         pts = normal_pc(raw_pts)
 
+        if self.dataset_type != "modelnet" :
+            rotate_angle = - np.pi / 2
+            pts = rotate_shape(pts, "x", rotate_angle)
+
         if self.aug:
             pts = rotation_point_cloud(pts)
             pts = jitter_point_cloud(pts)
@@ -314,9 +318,9 @@ class UnifiedPointDG(data.Dataset):
                 shape=(self.num_points - pts.shape[0], 3), dtype=float)
             pts = np.concatenate((pts, pad_pc), axis=0)
         elif pts.shape[0] > self.num_points:
-            point_idx = np.arange(0, pts.shape[0])
-            np.random.shuffle(point_idx)
-            pts = pts[point_idx[:self.num_points]]
+            # point_idx = np.arange(0, pts.shape[0])
+            # np.random.shuffle(point_idx)
+            pts = fps(pts, self.num_points)
         pts = np.expand_dims(pts.transpose(), axis=2)
         return torch.from_numpy(pts).type(torch.FloatTensor), label
 

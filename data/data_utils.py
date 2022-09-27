@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 
 
 def normal_pc(pc):
@@ -13,6 +14,27 @@ def normal_pc(pc):
     pc = pc / pc_L_max
     return pc
 
+
+def rotate_shape(x, axis, angle):
+    """
+    Input:
+        x: pointcloud data, [B, C, N]
+        axis: axis to do rotation about
+        angle: rotation angle
+    Return:
+        A rotated shape
+    """
+    R_x = np.asarray([[1, 0, 0], [0, np.cos(angle), -np.sin(angle)], [0, np.sin(angle), np.cos(angle)]])
+    R_y = np.asarray([[np.cos(angle), 0, np.sin(angle)], [0, 1, 0], [-np.sin(angle), 0, np.cos(angle)]])
+    R_z = np.asarray([[np.cos(angle), -np.sin(angle), 0], [np.sin(angle), np.cos(angle), 0], [0, 0, 1]])
+
+    if axis == "x":
+        return x.dot(R_x).astype('float32')
+    elif axis == "y":
+        return x.dot(R_y).astype('float32')
+    else:
+        return x.dot(R_z).astype('float32')
+    
 
 def rotation_point_cloud(pc):
     """
@@ -29,12 +51,12 @@ def rotation_point_cloud(pc):
     # rotation_matrix = np.array([[cosval, 0, sinval],
     #                             [0, 1, 0],
     #                             [-sinval, 0, cosval]])
-    rotation_matrix = np.array([[1, 0, 0],
-                                [0, cosval, -sinval],
-                                [0, sinval, cosval]])
-    # rotation_matrix = np.array([[cosval, -sinval, 0],
-    #                             [sinval, cosval, 0],
-    #                             [0, 0, 1]])
+    # rotation_matrix = np.array([[1, 0, 0],
+    #                             [0, cosval, -sinval],
+    #                             [0, sinval, cosval]])
+    rotation_matrix = np.array([[cosval, -sinval, 0],
+                                [sinval, cosval, 0],
+                                [0, 0, 1]])
     rotated_data = np.dot(pc.reshape((-1, 3)), rotation_matrix)
 
     return rotated_data
@@ -185,3 +207,56 @@ def fps(points, n_samples):
         points_left = np.delete(points_left, selected)
 
     return points[sample_inds]
+
+
+def farthest_point_sample_np(xyz, npoint):
+    """
+    Input:
+        xyz: pointcloud data, [B, C, N]
+        npoint: number of samples
+    Return:
+        centroids: sampled pointcloud index, [B, npoint]
+    """
+
+    B, C, N = xyz.shape
+    centroids = np.zeros((B, npoint), dtype=np.int64)
+    distance = np.ones((B, N)) * 1e10
+    farthest = np.random.randint(0, N, (B,), dtype=np.int64)
+    batch_indices = np.arange(B, dtype=np.int64)
+    centroids_vals = np.zeros((B, C, npoint))
+    for i in range(npoint):
+        centroids[:, i] = farthest  # save current chosen point index
+        centroid = xyz[batch_indices, :, farthest].reshape(B, C, 1)  # get the current chosen point value
+        centroids_vals[:, :, i] = centroid[:, :, 0].copy()
+        dist = np.sum((xyz - centroid) ** 2, 1)  # euclidean distance of points from the current centroid
+        mask = dist < distance  # save index of all point that are closer than the current max distance
+        distance[mask] = dist[mask]  # save the minimal distance of each point from all points that were chosen until now
+        farthest = np.argmax(distance, axis=1)  # get the index of the point farthest away
+    return centroids, centroids_vals
+
+
+def farthest_point_sample(xyz, npoint):
+    """
+    Input:
+        xyz: pointcloud data, [B, C, N]
+        npoint: number of samples
+    Return:
+        centroids: sampled pointcloud index, [B, npoint]
+    """
+    device = torch.device("cuda:" + str(xyz.get_device()))
+
+    B, C, N = xyz.shape
+    centroids = torch.zeros(B, npoint, dtype=torch.long).to(device)  # B x npoint
+    distance = torch.ones(B, N).to(device) * 1e10
+    farthest = torch.randint(0, N, (B,), dtype=torch.long).to(device)
+    batch_indices = torch.arange(B, dtype=torch.long).to(device)
+    centroids_vals = torch.zeros(B, C, npoint).to(device)
+    for i in range(npoint):
+        centroids[:, i] = farthest  # save current chosen point index
+        centroid = xyz[batch_indices, :, farthest].view(B, C, 1)  # get the current chosen point value
+        centroids_vals[:, :, i] = centroid[:, :, 0].clone()
+        dist = torch.sum((xyz - centroid) ** 2, 1)  # euclidean distance of points from the current centroid
+        mask = dist < distance  # save index of all point that are closer than the current max distance
+        distance[mask] = dist[mask]  # save the minimal distance of each point from all points that were chosen until now
+        farthest = torch.max(distance, -1)[1]  # get the index of the point farthest away
+    return centroids, centroids_vals
