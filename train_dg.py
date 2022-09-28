@@ -74,8 +74,8 @@ def main():
     assert args.batch_size % total_gpus == 0, 'Batch size should match the number of gpus'
     args.batch_size = args.batch_size // total_gpus
 
-    if args.fix_random_seed:
-        common_utils.set_random_seed(666 + cfg.LOCAL_RANK)
+  
+    common_utils.set_random_seed(666 + cfg.LOCAL_RANK)
     
     if dist_train:
         logger.info('total_batch_size: %d' % (total_gpus * args.batch_size))
