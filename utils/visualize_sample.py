@@ -24,15 +24,13 @@ def draw_pc(pc, show=False, save_dir=None, text_=None, pc_2=None):
     if pc_2 is not None:
         ax.scatter(pc_2[:, 0], pc_2[:, 1], pc_2[:, 2], marker='.', c="r", alpha=0.5)
     ax.grid(False)
-    # ax.axis('off')
+    ax.axis('off')
 
     if text_ is not None:
         plt.text(1,1, text_, fontsize=12)
     if show:
         plt.show()
     if save_dir is not None:
-        mkdir(save_dir)
-        save_dir = save_dir + '/' + str(i) + '.jpg'
         plt.savefig(save_dir)
     plt.close()
 
