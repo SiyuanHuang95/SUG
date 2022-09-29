@@ -11,7 +11,7 @@ MODEL: MDA
 # alignment model
 
 METHODS:
-    MMD_WEIGHT: 1.0
+    MMD_WEIGHT: 0.5
     # the weight of total MMD loss
     CLS_WEIGHT: 1.0
     # the weight of total classification loss
@@ -49,6 +49,7 @@ DATASET_SPLITTER:
     SAMPLE_RATE: 0.5
     TRAIN_BASE: 1
     RELOAD: True
+    EXTRA_TAG: Datetime
 
 
 OPTIMIZATION:
