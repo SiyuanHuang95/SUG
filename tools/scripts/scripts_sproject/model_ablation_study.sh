@@ -3,7 +3,6 @@
 #SBATCH --partition=shlab_adg
 #SBATCH -N 1
 #SBATCH --mail-type=end
-#SBATCH --mail-user=huangsiyuan@pjlab.org.cn
 #SBATCH --output=/mnt/lustre/huangsiyuan/pointdg/logs_sproject/model_tune%j.out
 #SBATCH --error=/mnt/lustre/huangsiyuan/pointdg/logs_sproject/model_tune%j.err
 #SBATCH --gres=gpu:1
