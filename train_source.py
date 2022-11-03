@@ -14,7 +14,7 @@ import datetime
 from tensorboardX import SummaryWriter
 from utils.eval_utils import eval_worker
 from utils.train_utils import save_checkpoint, checkpoint_state, adjust_learning_rate, discrepancy
-from utils.common_utils import create_logger, exp_log_folder_creator
+from utils.common_utils import create_logger, exp_log_folder_creator, set_random_seed
 from utils.config import parser_config, log_config_to_file
 from utils.train_files_spliter import dataset_list
 
@@ -67,6 +67,7 @@ def main():
     logger.info(f'batch_size: {BATCH_SIZE}')
 
     num_cls = cfg["DATASET"]["NUM_CLASS"]
+    set_random_seed(666)
     # Model
     if cfg.get("Model", "PointNet") == "PointNet2":
         model = Pointnet2_cls(num_class=num_cls)
@@ -85,7 +86,7 @@ def main():
     weight_decay = cfg["OPTIMIZATION"]["WEIGHT_DECAY"]
 
     optimizer = optim.Adam(model.parameters(), lr=LR, weight_decay=weight_decay)
-    lr_schedule = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max_epoch_num+remain_epoch)
+    lr_schedule = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max_epoch_num)
     # lr_schedule = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.7)
 
     best_test_acc = {"source": [0, 0], "test1":[0, 0], "test2":[0, 0]}

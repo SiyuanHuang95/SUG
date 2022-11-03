@@ -320,8 +320,6 @@ class UnifiedPointDG(data.Dataset):
                 shape=(self.num_points - pts.shape[0], 3), dtype=float)
             pts = np.concatenate((pts, pad_pc), axis=0)
         elif pts.shape[0] > self.num_points:
-            # point_idx = np.arange(0, pts.shape[0])
-            # np.random.shuffle(point_idx)
             pts = fps(pts, self.num_points)
         pts = np.expand_dims(pts.transpose(), axis=2)
         return torch.from_numpy(pts).type(torch.FloatTensor), label
@@ -330,7 +328,8 @@ class UnifiedPointDG(data.Dataset):
         return self.pts.shape[0]
 
 
-def create_splitted_dataset(dataset_type, status="train", config=None, logger=None, pc_num=1024, model="Pointnet"):
+
+def create_splitted_dataset(dataset_type, status="train", config=None, logger=None, pc_num=1024, aug=True, model="Pointnet"):
     dataset_list = ["scannet", "shapenet", "modelnet"]
     assert dataset_type in dataset_list, f"Not supported dataset {dataset_type}!"
 
@@ -342,8 +341,7 @@ def create_splitted_dataset(dataset_type, status="train", config=None, logger=No
         pts = dataset_spliter[subset]["pts"]
         label = dataset_spliter[subset]["label"]
         dataset_subsets.append(UnifiedPointDG(
-            dataset_type=dataset_type, pts=pts, labels=label, status=status, pc_input_num=pc_num, model=model))
-
+            dataset_type=dataset_type, pts=pts, labels=label, status=status, pc_input_num=pc_num, model=model, aug=aug))
     return dataset_subsets
 
 

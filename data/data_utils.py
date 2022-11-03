@@ -14,6 +14,26 @@ def normal_pc(pc):
     pc = pc / pc_L_max
     return pc
 
+def rotate_shape(x, axis, angle):
+    """
+    Input:
+        x: pointcloud data, [B, C, N]
+        axis: axis to do rotation about
+        angle: rotation angle
+    Return:
+        A rotated shape
+    """
+    R_x = np.asarray([[1, 0, 0], [0, np.cos(angle), -np.sin(angle)], [0, np.sin(angle), np.cos(angle)]])
+    R_y = np.asarray([[np.cos(angle), 0, np.sin(angle)], [0, 1, 0], [-np.sin(angle), 0, np.cos(angle)]])
+    R_z = np.asarray([[np.cos(angle), -np.sin(angle), 0], [np.sin(angle), np.cos(angle), 0], [0, 0, 1]])
+
+    if axis == "x":
+        return x.dot(R_x).astype('float32')
+    elif axis == "y":
+        return x.dot(R_y).astype('float32')
+    else:
+        return x.dot(R_z).astype('float32')
+
 
 def rotate_shape(x, axis, angle):
     """

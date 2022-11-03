@@ -9,6 +9,7 @@ DATASET:
 
 MODEL: MDA
 # alignment model
+Model: DGCNN
 
 METHODS:
     CLASS_MMD: 
@@ -25,12 +26,15 @@ METHODS:
     # the weight of total MMD loss
     ADV_WEIGHT: 1
     # two heads of the model output similar
+    PURE_CLS_EPOCH: 0
+    CLS_WEIGHT: 1.0
 
 DATASET_SPLITTER:
     METHOD: Random
     SUBSET_FULLSIZE: False
     SAMPLE_RATE: 0.5
     TRAIN_BASE: 1
+    RELOAD: True
 
 
 OPTIMIZATION:

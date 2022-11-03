@@ -36,4 +36,4 @@ srun -p ${PARTITION} \
     ${SRUN_ARGS} \
     python -u ../../../train_dg.py --launcher slurm --tcp_port $PORT ${PY_ARGS}
 
-# sh dg_slurm.sh shlab_adg dg 1 auto --cfg ../../cfgs/cfgs_scan/DG_unified_loss_onedataset_scannet.yaml --ckpt_save_interval 50 
+# sh dg_slurm.sh shlab_adg_s2 dg 1 auto --cfg ../../cfgs/cfgs_sproject/DG_unified_loss_onedataset_modelnet.yaml --ckpt_save_interval 50 

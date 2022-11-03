@@ -323,7 +323,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
     args.pre_trained =  "/point_dg/data/output/Source_Baseline/ckpt/Source_exp/Source_Baseline"
     # args.pre_trained =  "/mnt/lustre/huangsiyuan/data/PointDA_data/output/Source_Baseline/ckpt/Source_exp/Source_Baseline"
-    args.process_all = True
     
     if args.process_all:
         process_list = []
