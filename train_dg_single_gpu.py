@@ -72,16 +72,16 @@ def main():
         target_train_datasets = []
 
         for config_ in split_config:
-            source_train_subsets = create_splitted_dataset(dataset_type=args.source, status="train", logger=logger, config=config_)
+            source_train_subsets = create_splitted_dataset(dataset_type=args.source, status="train", logger=logger, config=config_, model=cfg.get("Model", "Pointnet"))
             source_train_datasets.append(source_train_subsets[config_["TRAIN_BASE"]])
             target_train_datasets.append(source_train_subsets[1-config_["TRAIN_BASE"]])
     else:
         raise RuntimeError(f"Unsupported Splitter Config {type(split_config)}")
     # split 2 is fullsize
 
-    source_test_dataset = create_single_dataset(args.source, status="test", aug=False)
-    target_test_dataset1 = create_single_dataset(test_datasets[0], status="test", aug=False)
-    target_test_dataset2 = create_single_dataset(test_datasets[-1], status="test", aug=False)
+    source_test_dataset = create_single_dataset(args.source, status="test", aug=False, model=cfg.get("Model", "Pointnet"))
+    target_test_dataset1 = create_single_dataset(test_datasets[0], status="test", aug=False, model=cfg.get("Model", "Pointnet"))
+    target_test_dataset2 = create_single_dataset(test_datasets[-1], status="test", aug=False, model=cfg.get("Model", "Pointnet"))
 
     if not multi_spliter:
         num_source_train = len(source_train_dataset)
