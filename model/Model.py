@@ -4,6 +4,7 @@ from model.pointnet2_utils import PointNetSetAbstraction
 from model.pointnet2.pointnet2_modules import PointnetFPModule, PointnetSAModuleMSG
 
 import model.pointnet2.pytorch_utils as pt_utils
+from model.Ptran_transformer import TransformerBlock
 
 import torch
 import torch.nn as nn
@@ -279,6 +280,39 @@ class Pointnet_g(nn.Module):
         else:
             return x, node_fea
 
+
+class TransitionDown(nn.Module):
+    def __init__(self, k, nneighbor, channels):
+        super().__init__()
+        self.sa = PointNetSetAbstraction(k, 0, nneighbor, channels[0], channels[1:], group_all=False, knn=True)
+        
+    def forward(self, xyz, points):
+        return self.sa(xyz, points)
+
+
+class PTran_g(nn.Module):
+    def __init__(self):
+        super(PTran_g, self).__init__()
+        npoints, nblocks, nneighbor, n_c, d_points = 1024, 4, 16, 10, 3
+        transformer_dim = 512  # TODO to see whether can be 1024
+        self.fc1 = nn.Sequential(
+            nn.Linear(d_points, 32),
+            nn.ReLU(),
+            nn.Linear(32, 32)
+        )
+
+        self.transformer1 = TransformerBlock(32, transformer_dim, nneighbor)
+        self.transition_downs = nn.ModuleList()
+        self.transformers = nn.ModuleList()
+        for i in range(nblocks):
+            channel = 32 * 2 ** (i + 1)
+            self.transition_downs.append(TransitionDown(npoints // 4 ** (i + 1), nneighbor, [channel // 2 + 3, channel, channel]))
+            self.transformers.append(TransformerBlock(channel, transformer_dim, nneighbor))
+        self.nblocks = nblocks
+    
+    def forward(self, x):
+
+        pass
 
 # Classifier
 class Pointnet_c(nn.Module):
