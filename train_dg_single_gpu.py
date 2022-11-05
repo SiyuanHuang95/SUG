@@ -20,7 +20,7 @@ import copy
 from utils.eval_utils import eval_worker
 from utils.train_utils import save_checkpoint, checkpoint_state, adjust_learning_rate, discrepancy, Sampler
 from model.model_utils import focal_loss
-from utils.common_utils import create_logger, exp_log_folder_creator
+from utils.common_utils import create_logger, exp_log_folder_creator, set_random_seed
 from utils.config import parser_config, log_config_to_file
 from data.dataloader import create_splitted_dataset, create_single_dataset
 
@@ -31,6 +31,9 @@ warnings.filterwarnings("ignore")
 
 def main():
     args, cfg = parser_config()
+
+    if args.fix_random_seed:
+        set_random_seed(666 + cfg.LOCAL_RANK)
 
     device = 'cuda'
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
