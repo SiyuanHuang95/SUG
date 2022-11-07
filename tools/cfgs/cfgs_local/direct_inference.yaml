@@ -1,17 +1,31 @@
 EXPERIMENT: Source_exp
 EXTRA_TAG: Source_Baseline/test3
-DATA_ROOT: /point_dg/data
-LOGS_ROOT: /point_dg/logs
+DATA_ROOT: /hdd1/huangsiyuan/PointDA_data
+LOGS_ROOT: /hdd1/huangsiyuan/PointDA_data
 
 DATASET:
     NUM_CLASS: 10
 
+# Model: PointNet2 DGCNN PTran
+Model: KPConv
+
 OPTIMIZATION:
     NUM_EPOCHES: 200
 
-    LR: 0.0001
+    # # for pointnet bs=64 PTran=32
+    # LR: 0.0001
+    # LR_SCALER: 1.0
+    # WEIGHT_DECAY: 0.0005
+    # MOMENTUM: 0.9
+
+    # for KPConv, bs=16
+    LR: 0.001
     LR_SCALER: 1.0
     WEIGHT_DECAY: 0.0005
-    MOMENTUM: 0.9
-    # TODO Do we need to add more optimization parameters like adam_cycle？
-    # or it is not our current main focus
+    MOMENTUM: 0.98
+
+    # for dgcnn, bs=32
+    # LR_SCALER: 1.0
+    # LR: 0.001
+    # WEIGHT_DECAY: 0.00005
+    # MOMENTUM: 0.9

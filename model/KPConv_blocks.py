@@ -389,7 +389,7 @@ class KPConv(nn.Module):
 
         # Get the features of each neighborhood [n_points, n_neighbors, in_fdim]
         neighb_x = gather(x, new_neighb_inds)
-
+        # x * 50 * 3
         # Apply distance weights [n_points, n_kpoints, in_fdim]
         weighted_features = torch.matmul(all_weights, neighb_x)
 
@@ -669,6 +669,10 @@ class ResnetBottleneckBlock(nn.Module):
         self.in_dim = in_dim
         self.out_dim = out_dim
 
+        self.last_block = False
+        if config.num_layers == layer_ind + 1:
+            self.last_block = True
+
         # First downscaling mlp
         if in_dim != out_dim // 4:
             self.unary1 = UnaryBlock(in_dim, out_dim // 4, self.use_bn, self.bn_momentum)
@@ -707,6 +711,7 @@ class ResnetBottleneckBlock(nn.Module):
 
         stack_lengths_pre = batch['stack_lengths'][self.layer_ind]
 
+        # if 'strided' in self.block_name and not self.last_block:
         if 'strided' in self.block_name:
             q_pts = batch['points'][self.layer_ind + 1]
             s_pts = batch['points'][self.layer_ind]

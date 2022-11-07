@@ -1,8 +1,10 @@
 """Predator model and KPConv processing code
+Borrowed from: https://github.com/yewzijian/RegTR/blob/main/src/models/backbone_kpconv/kpconv.py
 """
 
 from typing import List
 import logging
+from easydict import EasyDict
 
 import MinkowskiEngine as ME
 import numpy as np
@@ -14,14 +16,119 @@ from pytorch3d.ops import packed_to_padded, ball_query
 # # preprocessing (you'll need to compile the code using the included bash scripts)
 # from .cpp_wrappers.cpp_subsampling import grid_subsampling as cpp_subsampling
 # from .cpp_wrappers.cpp_neighbors import radius_neighbors as cpp_neighbors
-from .kpconv_blocks import *
-
+from model.KPConv_blocks import *
 
 _logger = logging.getLogger(__name__)
 
+KPConvConfig = EasyDict()
+KPConvConfig["num_class"] = 10
+KPConvConfig["first_subsampling_dl"] = 0.02
+KPConvConfig["conv_radius"] = 2.5
+KPConvConfig["deform_radius"] = 6.0
+
+KPConvConfig["d_bottle"] = 256
+KPConvConfig["in_feats_dim"] = 1
+KPConvConfig["KP_extent"] = 1.2
+KPConvConfig["KP_influence"] = "linear"
+KPConvConfig["overlap_radius"] = 0.04
+KPConvConfig["use_batch_norm"] = True
+KPConvConfig["batch_norm_momentum"] = 0.02
+KPConvConfig["modulated"] = False
+KPConvConfig["num_kernel_points"] = 15
+KPConvConfig["first_feats_dim"] = 64
+KPConvConfig["fixed_kernel_points"] = "center"
+KPConvConfig["neighborhood_limits"] = [50, 50, 50, 50, 50]
+KPConvConfig["aggregation_mode"] =  "sum"
+KPConvConfig["first_subsampling_dl"] = 0.02
+KPConvConfig["in_points_dim"] = 3 
+KPConvConfig["num_layers"] = 5
+KPConvConfig["architecture"] = ['simple',
+                   'resnetb',
+                   'resnetb_strided',
+                   'resnetb',
+                   'resnetb',
+                   'resnetb_strided',
+                    'resnetb',
+                    'resnetb',
+                    'resnetb_strided',
+                    'resnetb',
+                    'resnetb',
+                    'resnetb_strided',
+                    'resnetb',
+                    'resnetb']
+
+
+class KPFCls(torch.nn.Module):
+    def __init__(self, config=None, increase_channel_when_downsample=True):
+        super().__init__()
+        if config is None:
+            self.config = KPConvConfig
+        else:
+            self.config = config
+
+        self.preprocessor = PreprocessorGPU(self.config)
+        self.encoder = KPFEncoder(self.config)
+        self.global_avg_pooling = GlobalAverageBlock()
+        self.fc = torch.nn.Sequential(
+            nn.Linear(1024, 256),
+            nn.ReLU(),
+            nn.Linear(256, 64),
+            nn.ReLU(),
+            nn.Linear(64, self.config.num_class)
+        )
+
+    def forward(self, x):
+        B = x.shape[0]
+        x_ = x.squeeze(-1)
+        x_ = x_.permute(0, 2, 1)
+        x_list = []
+        if x.shape[0] > 1:
+            for i in range(x.shape[0]):
+                x_list.append(x_[i, :])
+        kpconv_meta = self.preprocessor(x_list)
+        feats0 = kpconv_meta["points"][0][:, 0:1]
+        feats = self.encoder(feats0, kpconv_meta)
+        feats_avg = self.global_avg_pooling(feats[0], kpconv_meta["stack_lengths"][-1])
+        # feats = feats.view(B, 1024, -1)
+        feats = self.fc(feats_avg)
+        return feats
+
+class GlobalAverageBlock(nn.Module):
+
+    def __init__(self):
+        """
+        Initialize a global average block with its ReLU and BatchNorm.
+        """
+        super(GlobalAverageBlock, self).__init__()
+        return
+
+    def forward(self, x, len):
+        return global_average(x, len)
+
+def global_average(x, batch_lengths):
+    """
+    Block performing a global average over batch pooling
+    :param x: [N, D] input features
+    :param batch_lengths: [B] list of batch lengths
+    :return: [B, D] averaged features
+    """
+
+    # Loop over the clouds of the batch
+    averaged_features = []
+    i0 = 0
+    for b_i, length in enumerate(batch_lengths):
+
+        # Average features for each batch cloud
+        averaged_features.append(torch.mean(x[i0:i0 + length], dim=0))
+
+        # Increment for next cloud
+        i0 += length
+
+    # Average features in each batch
+    return torch.stack(averaged_features)
 
 class KPFEncoder(torch.nn.Module):
-    def __init__(self, config, d_bottle, increase_channel_when_downsample=True):
+    def __init__(self, config, increase_channel_when_downsample=True):
         super().__init__()
         self.logger = logging.getLogger(__name__)
 
@@ -78,6 +185,8 @@ class KPFEncoder(torch.nn.Module):
             """
             self.encoder_skips.append(block_i)
             self.encoder_skip_dims.append(in_dim)
+        
+        self.layer_idx = octave
 
     def forward(self, x, batch):
         skip_x = []
@@ -508,6 +617,7 @@ class PreprocessorGPU(torch.nn.Module):
                 up_i = torch.zeros((0, 1), dtype=torch.int64)
 
             # Updating input lists
+            print("Update the meta data when process: ", block)
             input_points.append(batched_points)
             input_neighbors.append(conv_i.long())
             input_pools.append(pool_i.long())

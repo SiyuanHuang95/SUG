@@ -4,6 +4,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from model.model_pointnet import Pointnet_cls, Pointnet2_cls, DGCNN
 from model.Ptran_model import PointTransformerCls
+from model.KPConv_model import KPFCls
 from data.dataloader import Modelnet40_data, Shapenet_data, Scannet_data_h5
 from data.dataloader import create_single_dataset
 
@@ -75,6 +76,8 @@ def main():
         model = DGCNN()
     elif cfg.get("Model", "PointNet") == "PTran":
         model = PointTransformerCls()
+    elif cfg.get("Model", "PointNet") == "KPConv":
+        model = KPFCls()
     else:
         model = Pointnet_cls(num_class=num_cls)
     model = model.to(device=device)
