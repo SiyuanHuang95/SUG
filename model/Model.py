@@ -5,6 +5,7 @@ from model.pointnet2.pointnet2_modules import PointnetFPModule, PointnetSAModule
 
 import model.pointnet2.pytorch_utils as pt_utils
 from model.Ptran_transformer import TransformerBlock
+import model.PTran_utils as PTran_utils
 
 import torch
 import torch.nn as nn
@@ -284,7 +285,7 @@ class Pointnet_g(nn.Module):
 class TransitionDown(nn.Module):
     def __init__(self, k, nneighbor, channels):
         super().__init__()
-        self.sa = PointNetSetAbstraction(k, 0, nneighbor, channels[0], channels[1:], group_all=False, knn=True)
+        self.sa = PTran_utils.PointNetSetAbstraction(k, 0, nneighbor, channels[0], channels[1:], group_all=False, knn=True)
         
     def forward(self, xyz, points):
         return self.sa(xyz, points)
@@ -294,7 +295,7 @@ class PTran_g(nn.Module):
     def __init__(self):
         super(PTran_g, self).__init__()
         npoints, nblocks, nneighbor, n_c, d_points = 1024, 4, 16, 10, 3
-        transformer_dim = 512  # TODO to see whether can be 1024
+        transformer_dim = 512  
         self.fc1 = nn.Sequential(
             nn.Linear(d_points, 32),
             nn.ReLU(),
@@ -309,14 +310,44 @@ class PTran_g(nn.Module):
             self.transition_downs.append(TransitionDown(npoints // 4 ** (i + 1), nneighbor, [channel // 2 + 3, channel, channel]))
             self.transformers.append(TransformerBlock(channel, transformer_dim, nneighbor))
         self.nblocks = nblocks
+        self.conv1d = nn.Conv1d(64, 64, 1, stride=2)
     
-    def forward(self, x):
+    def forward(self, x, node=False):
+        # x : batch_size * 3 * 1024 * 1
+        x_ = x.squeeze(-1)
+        x_ = x_.permute(0, 2, 1) # bs * 1024 * 3
+        xyz = x_[..., :3]
+        x1 = self.fc1(x_) # x1:bs * 1024 * 32
+        points = self.transformer1(xyz, x1)[0] # bs * 1024 * 32
 
-        pass
+        xyz_and_feats = [(xyz, points)]
+        for i in range(self.nblocks):
+            xyz, points = self.transition_downs[i](xyz, points)
+            points = self.transformers[i](xyz, points)[0]
+            xyz_and_feats.append((xyz, points))
+
+        node_features_128 = xyz_and_feats[2][1]  # 32 * 64 * 128 
+        node_features = self.conv1d(node_features_128)
+        points = points.mean(1)
+
+        if node:
+            return points, node_features, None
+        else:
+            return points, node_features
+        
+        # points: bs * 4 * 512
+        # xyz_fea: [
+        # 0: bs * 1024 * 3     bs * 1024 * 32
+        # 1: bs * 256 * 3      bs * 256 * 64
+        # 2: bs * 64 * 3       bs * 64 * 128
+        # 3: bs * 16 * 3       bs * 16 * 256
+        # 4: bs * 4 * 3        bs * 4 * 512
+        # ]
+        # pass
 
 # Classifier
 class Pointnet_c(nn.Module):
-    def __init__(self, num_class=10, dgcnn_flag=False):
+    def __init__(self, num_class=10, dgcnn_flag=False, PTran_flag=False):
         super(Pointnet_c, self).__init__()
         # classifier in PointDAN
         # self.fc = nn.Linear(1024, num_class)
@@ -337,9 +368,12 @@ class Pointnet_c(nn.Module):
         self.dropout2 = nn.Dropout2d(p=0.4)
         self.mlp3 = nn.Linear(256, num_class)
 
+        self.PTran = PTran_flag
+
     def forward(self, x, adapt=False):
-        x = self.mlp1(x)  # batchsize*512
-        x = self.dropout1(x)
+        if not self.PTran:
+            x = self.mlp1(x)  # batchsize*512
+            x = self.dropout1(x)
         x = self.mlp2(x)  # batchsize*256
         if adapt == True:
             mid_feature = x 
@@ -356,6 +390,7 @@ class Net_MDA(nn.Module):
     def __init__(self, model_name='Pointnet'):
         super(Net_MDA, self).__init__()
         self.dgcnn_flag = False
+        self.PTran_flag = False
         if model_name == 'Pointnet':
             self.g = Pointnet_g()
         elif model_name == "Pointnet2":
@@ -363,13 +398,16 @@ class Net_MDA(nn.Module):
         elif model_name == "DGCNN":
             self.g = DGCNN()
             self.dgcnn_flag = True
+        elif model_name == "PTran":
+            self.g = PTran_g()
+            self.PTran_flag = True
         else:
             raise NotImplementedError("Unsupported model name")
 
         self.attention_s = CALayer(64 * 64)
         self.attention_t = CALayer(64 * 64)
-        self.c1 = Pointnet_c(dgcnn_flag=self.dgcnn_flag)
-        self.c2 = Pointnet_c(dgcnn_flag=self.dgcnn_flag)
+        self.c1 = Pointnet_c(dgcnn_flag=self.dgcnn_flag, PTran_flag=self.PTran_flag)
+        self.c2 = Pointnet_c(dgcnn_flag=self.dgcnn_flag, PTran_flag=self.PTran_flag)
 
     def forward(self, x, constant=1, adaptation=False, node_vis=False, mid_feat=False, node_adaptation_s=False,
                 node_adaptation_t=False, semantic_adaption=False):

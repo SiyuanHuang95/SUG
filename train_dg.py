@@ -74,8 +74,8 @@ def main():
     assert args.batch_size % total_gpus == 0, 'Batch size should match the number of gpus'
     args.batch_size = args.batch_size // total_gpus
 
-  
-    common_utils.set_random_seed(666 + cfg.LOCAL_RANK)
+    if args.fix_random_seed:
+        common_utils.set_random_seed(666 + cfg.LOCAL_RANK)
     
     if dist_train:
         logger.info('total_batch_size: %d' % (total_gpus * args.batch_size))
@@ -245,17 +245,17 @@ def main():
     scaler = opt_cfg["LR_SCALER"]
     pure_cls_epoch = cfg["METHODS"]["PURE_CLS_EPOCH"]
 
-    params = [{'params': v} for k, v in model.module.g.named_parameters() if 'pred_offset' not in k]
+    params = [{'params': v} for k, v in model.modules.g.named_parameters() if 'pred_offset' not in k]
 
     optimizer_g = optim.Adam(params, lr=LR, weight_decay=weight_decay)
     lr_schedule_g = optim.lr_scheduler.CosineAnnealingLR(optimizer_g, T_max=max_epoch_num + remain_epoch)
 
-    optimizer_c = optim.Adam([{'params': model.module.c1.parameters()}, {'params': model.module.c2.parameters()}], lr=LR * 2,
+    optimizer_c = optim.Adam([{'params': model.modules.c1.parameters()}, {'params': model.modules.c2.parameters()}], lr=LR * 2,
                              weight_decay=weight_decay)
     lr_schedule_c = optim.lr_scheduler.CosineAnnealingLR(optimizer_c, T_max=max_epoch_num + remain_epoch)
 
-    optimizer_dis = optim.Adam([{'params': model.module.g.parameters()}, {'params': model.module.attention_s.parameters()},
-                                {'params': model.module.attention_t.parameters()}],
+    optimizer_dis = optim.Adam([{'params': model.modules.g.parameters()}, {'params': model.modules.attention_s.parameters()},
+                                {'params': model.modules.attention_t.parameters()}],
                                lr=LR * scaler, weight_decay=weight_decay)
     lr_schedule_dis = optim.lr_scheduler.CosineAnnealingLR(optimizer_dis, T_max=max_epoch_num + remain_epoch)
 
