@@ -7,6 +7,9 @@ import model.pointnet2.pytorch_utils as pt_utils
 from model.Ptran_transformer import TransformerBlock
 import model.PTran_utils as PTran_utils
 
+from model.KPConv_blocks import sample_tensor_slices 
+from model.KPConv_model import KPFEncoder, PreprocessorGPU, GlobalAverageBlock
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -345,6 +348,44 @@ class PTran_g(nn.Module):
         # ]
         # pass
 
+
+from model.KPConv_model import KPConvConfig
+class KPConv_g(nn.Module):
+    def __init__(self, config=None):
+        super(KPConv_g, self).__init__()
+        if config is None:
+            self.config = KPConvConfig
+        else:
+            self.config = config
+        
+        self.preprocessor = PreprocessorGPU(self.config)
+        self.encoder = KPFEncoder(self.config)
+        self.global_avg_pooling = GlobalAverageBlock()
+
+        self.deform_fitting_power = self.config.deform_fitting_power
+
+    def forward(self, x, node=False):
+        x_ = x.squeeze(-1)
+        x_ = x_.permute(0, 2, 1)
+        x_list = []
+        if x.shape[0] > 1:
+            for i in range(x.shape[0]):
+                x_list.append(x_[i, :])
+        kpconv_meta = self.preprocessor(x_list)
+        feats0 = kpconv_meta["points"][0][:, 0:1]
+        feats = self.encoder(feats0, kpconv_meta)
+        feats_avg = self.global_avg_pooling(feats[0], kpconv_meta["stack_lengths"][-1])
+
+        node_features = feats[2]
+        stack_length = kpconv_meta["stack_lengths"][1]
+        nodes = sample_tensor_slices(node_features, stack_length)
+        # feats = feats.view(B, 1024, -1)
+        if node:
+            return feats_avg, nodes, None
+        else:
+            return feats_avg, nodes    
+
+
 # Classifier
 class Pointnet_c(nn.Module):
     def __init__(self, num_class=10, dgcnn_flag=False, PTran_flag=False):
@@ -401,6 +442,8 @@ class Net_MDA(nn.Module):
         elif model_name == "PTran":
             self.g = PTran_g()
             self.PTran_flag = True
+        elif model_name == "KPConv":
+            self.g = KPConv_g()
         else:
             raise NotImplementedError("Unsupported model name")
 

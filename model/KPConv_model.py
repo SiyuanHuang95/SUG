@@ -193,12 +193,14 @@ class KPFEncoder(torch.nn.Module):
 
     def forward(self, x, batch):
         skip_x = []
+        mid_fea = None
         for block_i, block_op in enumerate(self.encoder_blocks):
             if block_i in self.encoder_skips:
                 skip_x.append(x)
             x = block_op(x, batch)  # (N, C)
-
-        return x, skip_x
+            if block_i == 2:
+                mid_fea = x.clone().detach()
+        return x, skip_x, mid_fea
 
 
 class KPFDecoder(torch.nn.Module):

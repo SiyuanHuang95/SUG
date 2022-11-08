@@ -25,6 +25,7 @@
 - Python 3.8
 - PyTorch 1.8.0
 - others from requirements.txt
+- chamfer distance from: https://github.com/otaheri/chamfer_distance
 
 ### Docker Environment
 1. Ensure that you have installed Docker, NVIDIA-Container toolkit

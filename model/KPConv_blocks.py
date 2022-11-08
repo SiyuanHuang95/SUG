@@ -143,6 +143,19 @@ def max_pool(x, inds):
     return max_features
 
 
+def sample_tensor_slices(x, batch_lengths, sampled_len=64):
+    sampled_features = []
+    i0 = 0
+    for b_i, length in enumerate(batch_lengths):
+        fea = x[i0 : i0 + length]
+        step = length // sampled_len
+        index = [i for i in range(0, length, step)][:sampled_len]
+        sampled_features.append(fea[index, ...])
+
+        i0 += length
+
+    return torch.stack(sampled_features)
+
 def global_average(x, batch_lengths):
     """
     Block performing a global average over batch pooling

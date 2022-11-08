@@ -1,0 +1,96 @@
+EXPERIMENT: DG_exp
+EXTRA_TAG: DG_PT_ModelNet
+DATA_ROOT: /hdd1/huangsiyuan/PointDA_data
+LOGS_ROOT: /hdd1/huangsiyuan/PointDA_data
+
+DATASET:
+    NUM_CLASS: 10
+
+
+MODEL: MDA
+# alignment model
+
+# Model: DGCNN
+Model: KPConv
+# Pointnet vs  Pointnet2
+
+METHODS:
+    MMD_WEIGHT: 1.0
+    # the weight of total MMD loss
+    CLS_WEIGHT: 1.0
+    # the weight of total classification loss
+    GEO_MMD:
+        - NAME: SOFT_MMD
+          LABEL_SCALE: 50
+          # how one-hot vector influence the feature vector mmd
+          GEO_WEIGHTS: mean2one
+          GEO_SCALE: 1
+
+    SEM_MMD:
+        - NAME: SOFT_MMD
+          LABEL_SCALE: 5
+          SEM_WEIGHTS: mean2one
+          LABEL_WEIGHT: 0.5
+          SEM_SCALE: 1
+
+    CLASS_MMD: 
+        - NAME: SOFT_MMD
+          LABEL_SCALE: 1.0
+    # Use MMD loss only within same class
+    TARGET_LOSS: 1.0
+    # the weight of target split cls loss
+    SRC_LOSS_WEIGHT: 1.0
+    CLASS_BALANCE: True
+    # Sample the batch with class-balanced
+    ADV_WEIGHT: 0.5
+    # two heads of the model output similar
+    PURE_CLS_EPOCH: 1
+    # Epoches that no MMD worked for alignment
+    GRL: False
+
+
+DATASET_SPLITTER:
+    # FILE: size_1.0Random_0.5_2022-09-17 17:01:01.210299.pkl
+    
+    METHOD: Random
+    SUBSET_FULLSIZE: True
+    SAMPLE_RATE: 0.5
+    TRAIN_BASE: 1
+    RELOAD: True
+    EXTRA_TAG: Datetime
+
+OPTIMIZATION:
+    NUM_EPOCHES: 400
+
+    # pointnet
+    # LR: 0.0001
+    # LR_SCALER: 1.0
+    # WEIGHT_DECAY: 0.0005
+    # MOMENTUM: 0.9
+
+    # Point Transformer PTran=32
+    # LR: 0.0005
+    # LR_SCALER: 1.0
+    # WEIGHT_DECAY: 0.0001
+    # MOMENTUM: 0.9
+
+    # KPConv bs=16
+    LR: 0.001
+    LR_SCALER: 1.0
+    WEIGHT_DECAY: 0.0005
+    MOMENTUM: 0.98
+
+
+    # batch size = 32
+    # dgcnn
+    # LR: 0.001
+    # LR_SCALER: 1.0
+    # WEIGHT_DECAY: 0.00005
+    # MOMENTUM: 0.9
+
+    CLS_LOSS: ClassWeighting
+    CLS_WEIGHT: DLSA
+    DLSA_Q: 0.2
+    # DLSA_Q: 0.4
+    CLS_EVAL: True
+
