@@ -16,6 +16,7 @@ logs/
 *.DS_Store
 *.sbatch
 *.out
+*.txt
 
 **__pycache__**
 **build**
@@ -32,5 +33,6 @@ tools/cfgs_zb/
 tools/update_reminder.txt
 
 */logs/*
+**/KPConv_dispositions/**
 
 **sproject**

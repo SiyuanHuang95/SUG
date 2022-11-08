@@ -19,7 +19,7 @@ OPTIMIZATION:
     # MOMENTUM: 0.9
 
     # for KPConv, bs=16
-    LR: 0.001
+    LR: 0.01
     LR_SCALER: 1.0
     WEIGHT_DECAY: 0.0005
     MOMENTUM: 0.98

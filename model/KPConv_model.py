@@ -56,6 +56,7 @@ KPConvConfig["architecture"] = ['simple',
                     'resnetb_strided',
                     'resnetb',
                     'resnetb']
+KPConvConfig["deform_fitting_power"] = 1.0
 
 
 class KPFCls(torch.nn.Module):
@@ -76,6 +77,7 @@ class KPFCls(torch.nn.Module):
             nn.ReLU(),
             nn.Linear(64, self.config.num_class)
         )
+        self.deform_fitting_power = self.config.deform_fitting_power
 
     def forward(self, x):
         B = x.shape[0]
@@ -92,6 +94,7 @@ class KPFCls(torch.nn.Module):
         # feats = feats.view(B, 1024, -1)
         feats = self.fc(feats_avg)
         return feats
+
 
 class GlobalAverageBlock(nn.Module):
 
@@ -274,6 +277,40 @@ class KPFDecoder(torch.nn.Module):
         return x, x_all
 
 
+def p2p_fitting_regularizer(net, deform_fitting_power=1):
+
+    fitting_loss = 0
+    repulsive_loss = 0
+
+    for m in net:
+
+        if hasattr(m, "KPConv") and m.KPConv.deformable:
+
+        ##############
+        # Fitting loss
+        ##############
+
+        # Get the distance to closest input point and normalize to be independant from layers
+            KP_min_d2 = m.min_d2 / (m.KP_extent ** 2)
+
+            # Loss will be the square distance to closest input point. We use L1 because dist is already squared
+            fitting_loss += net.l1(KP_min_d2, torch.zeros_like(KP_min_d2))
+
+            ################
+            # Repulsive loss
+            ################
+
+            # Normalized KP locations
+            KP_locs = m.deformed_KP / m.KP_extent
+
+            # Point should not be close to each other
+            for i in range(net.K):
+                other_KP = torch.cat([KP_locs[:, :i, :], KP_locs[:, i + 1:, :]], dim=1).detach()
+                distances = torch.sqrt(torch.sum((other_KP - KP_locs[:, i:i + 1, :]) ** 2, dim=2))
+                rep_loss = torch.sum(torch.clamp_max(distances - net.repulse_extent, max=0.0) ** 2, dim=1)
+                repulsive_loss += net.l1(rep_loss, torch.zeros_like(rep_loss)) / net.K
+
+    return deform_fitting_power * (2 * fitting_loss + repulsive_loss)
 
 ######## Functions to compute the KPConv required metadata, i.e. neighbor/pooling indices ######
 
@@ -617,7 +654,7 @@ class PreprocessorGPU(torch.nn.Module):
                 up_i = torch.zeros((0, 1), dtype=torch.int64)
 
             # Updating input lists
-            print("Update the meta data when process: ", block)
+            # print("Update the meta data when process: ", block)
             input_points.append(batched_points)
             input_neighbors.append(conv_i.long())
             input_pools.append(pool_i.long())

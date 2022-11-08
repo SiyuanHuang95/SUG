@@ -4,7 +4,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from model.model_pointnet import Pointnet_cls, Pointnet2_cls, DGCNN
 from model.Ptran_model import PointTransformerCls
-from model.KPConv_model import KPFCls
+from model.KPConv_model import KPFCls, p2p_fitting_regularizer
 from data.dataloader import Modelnet40_data, Shapenet_data, Scannet_data_h5
 from data.dataloader import create_single_dataset
 
@@ -116,6 +116,11 @@ def main():
 
             output_s = model(data)
             loss_s = criterion(output_s, label)
+
+            if cfg.get("Model", "PointNet") == "KPConv":
+                reg_loss = p2p_fitting_regularizer(model.encoder.encoder_blocks, deform_fitting_power=model.deform_fitting_power)
+                loss_s += reg_loss
+                
             loss_s.backward()
             optimizer.step()
             optimizer.zero_grad()
