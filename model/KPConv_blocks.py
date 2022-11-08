@@ -142,15 +142,35 @@ def max_pool(x, inds):
     max_features, _ = torch.max(pool_features, 1)
     return max_features
 
+def padde_tensor(x, times=1, element=0):
+    # print("original", x.shape)
+    padded_x = x
+    for i in range(times-1):
+        padded_x = torch.cat((padded_x,x), 0)
+    # print("after time padde", x.shape)
+
+    padded_index = [i for i in range(int(element))]
+    residual_tensor = x[padded_index, ...]
+    # print("residual:" ,residual_tensor.shape)
+    padded_tensor = torch.cat((padded_x, residual_tensor), 0)
+    # print("result:" ,padded_tensor.shape)
+    return padded_tensor
 
 def sample_tensor_slices(x, batch_lengths, sampled_len=64):
     sampled_features = []
     i0 = 0
     for b_i, length in enumerate(batch_lengths):
         fea = x[i0 : i0 + length]
-        step = length // sampled_len
-        index = [i for i in range(0, length, step)][:sampled_len]
-        sampled_features.append(fea[index, ...])
+        if length < sampled_len:
+            padded_times = sampled_len // length.detach().cpu().numpy()
+            padded_elements = sampled_len % length.detach().cpu().numpy()
+            fea = padde_tensor(fea, times=padded_times, element=padded_elements)
+
+            sampled_features.append(fea)
+        else:
+            step = length // sampled_len
+            index = [i for i in range(0, length, step)][:sampled_len]
+            sampled_features.append(fea[index, ...])
 
         i0 += length
 
