@@ -101,7 +101,7 @@ class Pointnet_g_layer1(nn.Module):
     def __init__(self):
         super(Pointnet_g_layer1, self).__init__()
         self.trans_net1 = transform_net(3, 3)
-        self.trans_net2 = transform_net(64, 64)
+        self.trans_net2 = transform_net(128, 128)
         self.conv1 = conv_2d(3, 64, 1)
         # SA Node Module
         self.node_fea = nn.Conv1d(64,64,1,stride=16)
