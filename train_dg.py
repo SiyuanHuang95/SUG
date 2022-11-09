@@ -149,7 +149,7 @@ def main():
     # AssertionError: daemonic processes are not allowed to have children
 
     # Model
-    model = mM.Net_MDA()
+    model = mM.Net_MDA(layer=str(cfg.get("AdaLayer", 3)))
     logger.info(model)
     model = model.to(device=device)
 
@@ -362,6 +362,8 @@ def main():
         time_pass_e = time.time() - since_e
         logger.info('The {} epoch takes {:.0f}m {:.0f}s'.format(epoch, time_pass_e // 60, time_pass_e % 60))
         logger.info('****************Finished One Epoch****************')
+
+        # break # Test for only one loop to debug
 
 
 if __name__ == '__main__':

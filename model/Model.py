@@ -60,33 +60,235 @@ class Pointnet_g(nn.Module):
 
     def forward(self, x, node=False):
         x_loc = x.squeeze(-1)
-
+        # x_loc: 64 * 3 * 1024
         transform = self.trans_net1(x)
         x = x.transpose(2, 1)
-
         x = x.squeeze(-1)
         x = torch.bmm(x, transform)
         x = x.unsqueeze(3)
         x = x.transpose(2, 1)
-        x = self.conv1(x)
-        x = self.conv2(x)
+        # x: 64 * 1024 *3 *1
+        x = self.conv1(x) # 64*3*1024*1 -> 64*64*1024*1
+        x = self.conv2(x) # 64*64*1024*1 -> 64*64*1024*1
+
+        transform = self.trans_net2(x) # 64 * 3 * 3
+        x = x.transpose(2, 1) # 64 * 1024 * 64 * 1
+        x = x.squeeze(-1) # 64 * 1024 * 64
+        x = torch.bmm(x, transform) 
+        x = x.unsqueeze(3)
+        x = x.transpose(2, 1) # 64 *64 *1024 *1
+
+        x, node_fea, node_off = self.conv3(x, x_loc)
+        # node_off: 64 * 3 * 64 node_fea: 64 * 64* 64 *1
+        # x = [B, dim, num_node, 1]/[64, 128, 1024, 1]; x_loc = [B, xyz, num_node] / [64, 3, 1024]
+        x = self.conv4(x) # 64 *128 *1024 *1
+        x = self.conv5(x) # 64 *128 *1024 *1
+
+        x, _ = torch.max(x, dim=2, keepdim=False) # 64 * 1024 * 1
+
+        x = x.squeeze(-1) # 64 * 1024
+
+        x = self.bn1(x)
+
+        if node:
+            return x, node_fea, node_off
+        else:
+            return x, node_fea
+
+
+# Generator
+class Pointnet_g_layer1(nn.Module):
+    def __init__(self):
+        super(Pointnet_g_layer1, self).__init__()
+        self.trans_net1 = transform_net(3, 3)
+        self.trans_net2 = transform_net(64, 64)
+        self.conv1 = conv_2d(3, 64, 1)
+        # SA Node Module
+        self.node_fea = nn.Conv1d(64,64,1,stride=16)
+        self.node_conv = conv_2d(64, 128, 1)
+
+        self.conv3 = conv_2d(128, 128, 1)
+        self.conv4 = conv_2d(128, 128, 1)
+        self.conv5 = conv_2d(128, 1024, 1)
+        self.bn1 = nn.BatchNorm1d(1024)
+
+    def forward(self, x, node=False):
+        x_loc = x.squeeze(-1)
+        # x_loc: 64 * 3 * 1024
+        transform = self.trans_net1(x)
+        x = x.transpose(2, 1)
+        x = x.squeeze(-1)
+        x = torch.bmm(x, transform)
+        x = x.unsqueeze(3)
+        x = x.transpose(2, 1)
+
+        # x: 64 * 1024 *3 *1
+        x = self.conv1(x) # 64*3*1024*1 -> 64*64*1024*1
+        node_fea = self.node_fea(x.squeeze(-1))
+        x = self.node_conv(x)
         transform = self.trans_net2(x) # 64 * 3 * 3
         x = x.transpose(2, 1) # 64 * 1024 * 64 * 1
 
         x = x.squeeze(-1) # 64 * 1024 * 64
         x = torch.bmm(x, transform) 
         x = x.unsqueeze(3)
-        x = x.transpose(2, 1)
+        x = x.transpose(2, 1) # 64 *64 *1024 *1
+       
+        x =self.conv3(x)
+        x = self.conv4(x) # 64 *128 *1024 *1
+        x = self.conv5(x) # 64 *128 *1024 *1
 
-        x, node_fea, node_off = self.conv3(x, x_loc)
+        x, _ = torch.max(x, dim=2, keepdim=False) # 64 * 1024 * 1
+        x = x.squeeze(-1) # 64 * 1024
+        x = self.bn1(x)
+
+        if node:
+            return x, node_fea, None
+        else:
+            return x, node_fea
+
+
+
+# Generator
+class Pointnet_g_layer2(nn.Module):
+    def __init__(self):
+        super(Pointnet_g_layer2, self).__init__()
+        self.trans_net1 = transform_net(3, 3)
+        self.trans_net2 = transform_net(64, 64)
+        self.conv1 = conv_2d(3, 64, 1)
+        # SA Node Module
+        self.conv2 = adapt_layer_off()  # (64->128)
+
+        self.conv3 = conv_2d(128, 128, 1)
+        self.conv4 = conv_2d(128, 128, 1)
+        self.conv5 = conv_2d(128, 1024, 1)
+        self.bn1 = nn.BatchNorm1d(1024)
+
+    def forward(self, x, node=False):
+        x_loc = x.squeeze(-1)
+        # x_loc: 64 * 3 * 1024
+        transform = self.trans_net1(x)
+        x = x.transpose(2, 1)
+        x = x.squeeze(-1)
+        x = torch.bmm(x, transform)
+        x = x.unsqueeze(3)
+        x = x.transpose(2, 1)
+        # x: 64 * 1024 *3 *1
+        x = self.conv1(x) # 64*3*1024*1 -> 64*64*1024*1
+        transform = self.trans_net2(x) # 64 * 3 * 3
+        x = x.transpose(2, 1) # 64 * 1024 * 64 * 1
+
+        x = x.squeeze(-1) # 64 * 1024 * 64
+        x = torch.bmm(x, transform) 
+        x = x.unsqueeze(3)
+        x = x.transpose(2, 1) # 64 *64 *1024 *1
+
+        x, node_fea, node_off = self.conv2(x, x_loc)
         # node_off: 64 * 3 * 64 node_fea: 64 * 64* 64 *1
         # x = [B, dim, num_node, 1]/[64, 128, 1024, 1]; x_loc = [B, xyz, num_node] / [64, 3, 1024]
-        x = self.conv4(x)
-        x = self.conv5(x)
+       
+       
+        x =self.conv3(x)
+        x = self.conv4(x) # 64 *128 *1024 *1
+        x = self.conv5(x) # 64 *128 *1024 *1
 
-        x, _ = torch.max(x, dim=2, keepdim=False)
+        x, _ = torch.max(x, dim=2, keepdim=False) # 64 * 1024 * 1
+        x = x.squeeze(-1) # 64 * 1024
+        x = self.bn1(x)
 
+        if node:
+            return x, node_fea, node_off
+        else:
+            return x, node_fea
+
+class Pointnet_g_layer4(nn.Module):
+    def __init__(self):
+        super(Pointnet_g_layer4, self).__init__()
+        self.trans_net1 = transform_net(3, 3)
+        self.trans_net2 = transform_net(64, 64)
+        self.conv1 = conv_2d(3, 64, 1)
+        self.conv2 = conv_2d(64, 64, 1)
+        
+        self.conv3 = conv_2d(64, 64, 1)
+        self.conv4 = adapt_layer_off()  # (64->128)
+        self.conv5 = conv_2d(128, 1024, 1)
+        self.bn1 = nn.BatchNorm1d(1024)
+
+    def forward(self, x, node=False):
+        x_loc = x.squeeze(-1)
+        # x_loc: 64 * 3 * 1024
+        transform = self.trans_net1(x)
+        x = x.transpose(2, 1)
         x = x.squeeze(-1)
+        x = torch.bmm(x, transform)
+        x = x.unsqueeze(3)
+        x = x.transpose(2, 1)
+        # x: 64 * 1024 *3 *1
+        x = self.conv1(x) # 64*3*1024*1 -> 64*64*1024*1
+        x = self.conv2(x) # 64*64*1024*1 -> 64*64*1024*1
+        transform = self.trans_net2(x) # 64 * 3 * 3
+        x = x.transpose(2, 1) # 64 * 1024 * 64 * 1
+
+        x = x.squeeze(-1) # 64 * 1024 * 64
+        x = torch.bmm(x, transform) 
+        x = x.unsqueeze(3)
+        x = x.transpose(2, 1) # 64 *64 *1024 *1
+
+        x = self.conv3(x) # 64 *128 *1024 *1
+        x, node_fea, node_off = self.conv4(x, x_loc)
+        x = self.conv5(x) # 64 *128 *1024 *1
+
+        x, _ = torch.max(x, dim=2, keepdim=False) # 64 * 1024 * 1
+
+        x = x.squeeze(-1) # 64 * 1024
+
+        x = self.bn1(x)
+
+        if node:
+            return x, node_fea, node_off
+        else:
+            return x, node_fea
+
+class Pointnet_g_layer5(nn.Module):
+    def __init__(self):
+        super(Pointnet_g_layer5, self).__init__()
+        self.trans_net1 = transform_net(3, 3)
+        self.trans_net2 = transform_net(64, 64)
+        self.conv1 = conv_2d(3, 64, 1)
+        self.conv2 = conv_2d(64, 64, 1)
+        self.conv3 = conv_2d(64, 64, 1)
+        self.conv4 = conv_2d(64, 64, 1)
+        self.conv5 = adapt_layer_off()  # (64->128)
+        self.conv6 = conv_2d(128, 1024, 1)
+        self.bn1 = nn.BatchNorm1d(1024)
+
+    def forward(self, x, node=False):
+        x_loc = x.squeeze(-1)
+        # x_loc: 64 * 3 * 1024
+        transform = self.trans_net1(x)
+        x = x.transpose(2, 1)
+        x = x.squeeze(-1)
+        x = torch.bmm(x, transform)
+        x = x.unsqueeze(3)
+        x = x.transpose(2, 1)
+        # x: 64 * 1024 *3 *1
+        x = self.conv1(x) # 64*3*1024*1 -> 64*64*1024*1
+        x = self.conv2(x) # 64*64*1024*1 -> 64*64*1024*1
+        transform = self.trans_net2(x) # 64 * 3 * 3
+        x = x.transpose(2, 1) # 64 * 1024 * 64 * 1
+
+        x = x.squeeze(-1) # 64 * 1024 * 64
+        x = torch.bmm(x, transform) 
+        x = x.unsqueeze(3)
+        x = x.transpose(2, 1) # 64 *64 *1024 *1
+
+        x = self.conv3(x) # 64 *128 *1024 *1
+        x = self.conv4(x) # 64 *128 *1024 *1
+        x, node_fea, node_off = self.conv5(x, x_loc)
+        x = self.conv6(x)
+        x, _ = torch.max(x, dim=2, keepdim=False) # 64 * 1024 * 1
+
+        x = x.squeeze(-1) # 64 * 1024
 
         x = self.bn1(x)
 
@@ -125,11 +327,21 @@ class Pointnet_c(nn.Module):
             return x, mid_feature
 
 
+
+PN_G_Dict = {
+    "1" : Pointnet_g_layer1(),
+    "2" : Pointnet_g_layer2(),
+    "3" : Pointnet_g(),
+    "4" : Pointnet_g_layer4(),
+    "5" : Pointnet_g_layer5()
+}
+
+
 class Net_MDA(nn.Module):
-    def __init__(self, model_name='Pointnet'):
+    def __init__(self, model_name='Pointnet', layer="3"):
         super(Net_MDA, self).__init__()
         if model_name == 'Pointnet':
-            self.g = Pointnet_g()
+            self.g = PN_G_Dict[layer]
             self.attention_s = CALayer(64 * 64)
             self.attention_t = CALayer(64 * 64)
             self.c1 = Pointnet_c()
