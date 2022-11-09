@@ -7,8 +7,6 @@ import model.pointnet2.pytorch_utils as pt_utils
 from model.Ptran_transformer import TransformerBlock
 import model.PTran_utils as PTran_utils
 
-from model.KPConv_blocks import sample_tensor_slices 
-from model.KPConv_model import KPFEncoder, PreprocessorGPU, GlobalAverageBlock
 
 import torch
 import torch.nn as nn
@@ -348,8 +346,6 @@ class PTran_g(nn.Module):
         # ]
         # pass
 
-
-from model.KPConv_model import KPConvConfig
 class KPConv_g(nn.Module):
     def __init__(self, config=None):
         super(KPConv_g, self).__init__()
@@ -374,16 +370,16 @@ class KPConv_g(nn.Module):
         kpconv_meta = self.preprocessor(x_list)
         feats0 = kpconv_meta["points"][0][:, 0:1]
         feats = self.encoder(feats0, kpconv_meta)
-        feats_avg = self.global_avg_pooling(feats[0], kpconv_meta["stack_lengths"][-1])
-
-        node_features = feats[2]
+        
         stack_length = kpconv_meta["stack_lengths"][1]
-        nodes = sample_tensor_slices(node_features, stack_length)
+        nodes = sample_tensor_slices(feats[2], stack_length)
+
+        feats = self.global_avg_pooling(feats[0], kpconv_meta["stack_lengths"][-1])
         # feats = feats.view(B, 1024, -1)
         if node:
-            return feats_avg, nodes, None
+            return feats, nodes, None
         else:
-            return feats_avg, nodes    
+            return feats, nodes    
 
 
 # Classifier
@@ -443,6 +439,9 @@ class Net_MDA(nn.Module):
             self.g = PTran_g()
             self.PTran_flag = True
         elif model_name == "KPConv":
+            from model.KPConv_blocks import sample_tensor_slices 
+            from model.KPConv_model import KPFEncoder, PreprocessorGPU, GlobalAverageBlock
+            from model.KPConv_model import KPConvConfig
             self.g = KPConv_g()
         else:
             raise NotImplementedError("Unsupported model name")
