@@ -23,6 +23,9 @@ def parser_config():
 
     parser.add_argument('--set', dest='set_cfgs', default=None, nargs=argparse.REMAINDER,
                         help='set extra config keys if needed [Used in last position]')
+    
+    parser.add_argument('--fix_random_seed', action='store_true', default=False, help='')
+
     args = parser.parse_args()
     
     cfg_from_yaml_file(args.cfg, cfg)
