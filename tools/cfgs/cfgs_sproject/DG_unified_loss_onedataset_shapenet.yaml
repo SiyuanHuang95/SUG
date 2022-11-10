@@ -4,12 +4,18 @@ DATA_ROOT: /mnt/petrelfs/huangsiyuan/data/PointDA_data
 LOGS_ROOT: /mnt/petrelfs/huangsiyuan/data/PointDA_data/logs
 
 
+DATA_ROOT: /mnt/petrelfs/huangsiyuan/data/PointDA_data
+LOGS_ROOT: /mnt/petrelfs/huangsiyuan/data/PointDA_data/logs
+
+
 DATASET:
     NUM_CLASS: 10
 
 
 MODEL: MDA
 # alignment model
+Model: DGCNN
+# Pointnet vs  Pointnet2
 Model: DGCNN
 # Pointnet vs  Pointnet2
 
