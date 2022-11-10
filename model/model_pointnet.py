@@ -1,5 +1,5 @@
 from model.Model import Pointnet_c
-from model.model_utils_old import *
+from model.model_utils import *
 from model.pointnet2_utils import PointNetSetAbstraction
 
 class Pointnet_cls(nn.Module):

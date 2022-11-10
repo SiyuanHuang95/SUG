@@ -8,6 +8,8 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 import random
 
+from datetime import datetime
+
 
 def get_dist_info(return_gpu_per_machine=False):
     if torch.__version__ < '1.0':
@@ -83,6 +85,7 @@ def set_random_seed(seed):
     torch.cuda.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+    print("Set the Random Seed!")
 
 
 def worker_init_fn(worker_id, seed=666):
@@ -128,6 +131,9 @@ def exp_log_folder_creator(cfg, extra_tag=None):
     """
         return output_dir, cpkt_dir string
     """
+    today = datetime.now()
+    today_str = today.strftime('%Y-%m-%d %H:%M:%S')
+
     if 'data' not in cfg["DATA_ROOT"]:
         dir_root = os.path.join(cfg["DATA_ROOT"], 'PointDA_data/')
     else:
@@ -138,8 +144,17 @@ def exp_log_folder_creator(cfg, extra_tag=None):
     if extra_tag is not None:
         output_dir = os.path.join(output_dir, extra_tag)
         ckpt_dir = os.path.join(ckpt_dir, extra_tag)
-    if not os.path.exists(output_dir): os.makedirs(output_dir)
-    if not os.path.exists(ckpt_dir): os.makedirs(ckpt_dir)
+    if not os.path.exists(output_dir): 
+        os.makedirs(output_dir)
+    else:
+        output_dir = os.path.join(output_dir, today_str)
+        os.makedirs(output_dir)
+
+    if not os.path.exists(ckpt_dir): 
+        os.makedirs(ckpt_dir)
+    else:
+        ckpt_dir = os.path.join(ckpt_dir, today_str)
+        os.makedirs(ckpt_dir)
     return output_dir, ckpt_dir
 
 

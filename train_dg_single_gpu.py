@@ -57,7 +57,7 @@ def main():
     test_datasets = list(set(dataset_list) - {args.source})
     logger.info(f'The datasets used for testing: {test_datasets}')
 
-    # set_random_seed(666 + cfg.LOCAL_RANK)
+    set_random_seed(666 + cfg.LOCAL_RANK)
 
     # Data loading
     multi_spliter = False
