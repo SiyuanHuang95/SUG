@@ -349,11 +349,15 @@ class PTran_g(nn.Module):
 class KPConv_g(nn.Module):
     def __init__(self, config=None):
         super(KPConv_g, self).__init__()
+        from model.KPConv_model import KPFEncoder, PreprocessorGPU, GlobalAverageBlock
+        from model.KPConv_blocks import sample_tensor_slices 
+        from model.KPConv_model import KPConvConfig
         if config is None:
             self.config = KPConvConfig
         else:
             self.config = config
         
+        self.sample_tensor_slices = sample_tensor_slices
         self.preprocessor = PreprocessorGPU(self.config)
         self.encoder = KPFEncoder(self.config)
         self.global_avg_pooling = GlobalAverageBlock()
@@ -372,7 +376,7 @@ class KPConv_g(nn.Module):
         feats = self.encoder(feats0, kpconv_meta)
         
         stack_length = kpconv_meta["stack_lengths"][1]
-        nodes = sample_tensor_slices(feats[2], stack_length)
+        nodes = self.sample_tensor_slices(feats[2], stack_length)
 
         feats = self.global_avg_pooling(feats[0], kpconv_meta["stack_lengths"][-1])
         # feats = feats.view(B, 1024, -1)
@@ -381,6 +385,28 @@ class KPConv_g(nn.Module):
         else:
             return feats, nodes    
 
+    
+class KPConv_c(nn.Module):
+    def __init__(self, num_class=10, dgcnn_flag=False, PTran_flag=False):
+        super(KPConv_c, self).__init__()
+
+        self.mlp1 = nn.Linear(1024, 256)
+        self.mlp2 = nn.Linear(256, 64)
+        self.mlp3 = nn.Linear(64, num_class)
+        self.act = nn.ReLU()
+ 
+    def forward(self, x, adapt=False):
+        x = self.mlp1(x)
+        if adapt == True:
+            mid_feature = x 
+        x = self.act(x)
+        x = self.mlp2(x)
+        x = self.act(x)
+        x = self.mlp3(x)  # batchsize*10
+        if adapt == False:
+            return x
+        else:
+            return x, mid_feature
 
 # Classifier
 class Pointnet_c(nn.Module):
@@ -439,17 +465,22 @@ class Net_MDA(nn.Module):
             self.g = PTran_g()
             self.PTran_flag = True
         elif model_name == "KPConv":
-            from model.KPConv_blocks import sample_tensor_slices 
-            from model.KPConv_model import KPFEncoder, PreprocessorGPU, GlobalAverageBlock
+            
             from model.KPConv_model import KPConvConfig
-            self.g = KPConv_g()
+            self.g = KPConv_g(config=KPConvConfig)
         else:
             raise NotImplementedError("Unsupported model name")
 
         self.attention_s = CALayer(64 * 64)
         self.attention_t = CALayer(64 * 64)
-        self.c1 = Pointnet_c(dgcnn_flag=self.dgcnn_flag, PTran_flag=self.PTran_flag)
-        self.c2 = Pointnet_c(dgcnn_flag=self.dgcnn_flag, PTran_flag=self.PTran_flag)
+
+        if model_name != "KPConv":
+            self.c1 = Pointnet_c(dgcnn_flag=self.dgcnn_flag, PTran_flag=self.PTran_flag)
+            self.c2 = Pointnet_c(dgcnn_flag=self.dgcnn_flag, PTran_flag=self.PTran_flag)
+
+        else:
+            self.c1 = KPConv_c()
+            self.c2 = KPConv_c()
 
     def forward(self, x, constant=1, adaptation=False, node_vis=False, mid_feat=False, node_adaptation_s=False,
                 node_adaptation_t=False, semantic_adaption=False):
