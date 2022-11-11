@@ -181,6 +181,7 @@ def main():
     weight_decay = opt_cfg["WEIGHT_DECAY"]
     scaler = opt_cfg["LR_SCALER"]
     pure_cls_epoch = cfg["METHODS"]["PURE_CLS_EPOCH"]
+    sema_adapt_layer_index = int(cfg["METHODS"].get("SEM_LAYER", 2))
 
     params = [{'params': v} for k, v in model.g.named_parameters() if 'pred_offset' not in k]
 
@@ -240,9 +241,9 @@ def main():
             # Senmantic MMD loss
             pred_s1, pred_s2, sem_fea_s1, sem_fea_s2 = model(data, semantic_adaption=True)
             if cfg["METHODS"].get("GRL", None):
-                pred_t1, pred_t2, sem_fea_t1, sem_fea_t2 = model(data_t, semantic_adaption=True, constant=cons, adaptation=True)
+                pred_t1, pred_t2, sem_fea_t1, sem_fea_t2 = model(data_t, semantic_adaption=True, constant=cons, adaptation=True, sem_ada_layer=sema_adapt_layer_index)
             else:
-                pred_t1, pred_t2, sem_fea_t1, sem_fea_t2 = model(data_t, semantic_adaption=True)
+                pred_t1, pred_t2, sem_fea_t1, sem_fea_t2 = model(data_t, semantic_adaption=True, sem_ada_layer=sema_adapt_layer_index)
             # no need for GRL now
             # sem_fea_s1:64 * 256
 

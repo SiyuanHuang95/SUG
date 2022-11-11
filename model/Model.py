@@ -312,15 +312,19 @@ class Pointnet_c(nn.Module):
         self.dropout2 = nn.Dropout2d(p=0.7)
         self.mlp3 = nn.Linear(256, num_class)
 
-    def forward(self, x, adapt=False):
+    def forward(self, x, adapt=False, layer_index=2):
         x = self.mlp1(x)  # batchsize*512
+        if adapt and layer_index==1:
+            mid_feature = x
         x = self.dropout1(x)
         x = self.mlp2(x)  # batchsize*256
-        if adapt == True:
+        if adapt and layer_index == 2:
             mid_feature = x 
         # mid_feature: bs * 256
         x = self.dropout2(x)
         x = self.mlp3(x)  # batchsize*10
+        if adapt and layer_index == 3:
+            mid_feature = x
         if adapt == False:
             return x
         else:
@@ -348,7 +352,7 @@ class Net_MDA(nn.Module):
             self.c2 = Pointnet_c()
 
     def forward(self, x, constant=1, adaptation=False, node_vis=False, mid_feat=False, node_adaptation_s=False,
-                node_adaptation_t=False, semantic_adaption=False):
+                node_adaptation_t=False, semantic_adaption=False, sem_ada_layer=2):
         x, feat_ori, node_idx = self.g(x, node=True)
         batch_size = feat_ori.size(0)
 
@@ -376,11 +380,11 @@ class Net_MDA(nn.Module):
             x = grad_reverse(x, constant)
 
         if not semantic_adaption:
-            y1 = self.c1(x, adapt=semantic_adaption)
-            y2 = self.c2(x, adapt=semantic_adaption)
+            y1 = self.c1(x, adapt=semantic_adaption, layer_index=sem_ada_layer)
+            y2 = self.c2(x, adapt=semantic_adaption, layer_index=sem_ada_layer)
             return y1, y2
         else:
-            y1, sem_feature1 = self.c1(x, adapt=semantic_adaption)
-            y2, sem_feature2 = self.c2(x, adapt=semantic_adaption)
+            y1, sem_feature1 = self.c1(x, adapt=semantic_adaption, layer_index=sem_ada_layer)
+            y2, sem_feature2 = self.c2(x, adapt=semantic_adaption, layer_index=sem_ada_layer)
             return y1, y2, sem_feature1, sem_feature2
  
