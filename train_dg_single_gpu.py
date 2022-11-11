@@ -8,7 +8,6 @@ from easydict import EasyDict
 from model.model_pointnet import Pointnet_cls as Pointnet_cls
 import model.Model as mM
 import time
-import random
 import os
 import glob
 import pdb
@@ -23,8 +22,7 @@ from utils.train_utils import save_checkpoint, checkpoint_state, adjust_learning
 from model.model_utils import focal_loss
 from utils.common_utils import create_logger, exp_log_folder_creator, set_random_seed
 from utils.config import parser_config, log_config_to_file
-from data.dataloader import create_splitted_dataset, create_single_dataset, build_dataloader
-
+from data.dataloader import create_splitted_dataset, create_single_dataset
 
 
 from tensorboardX import SummaryWriter
@@ -39,7 +37,7 @@ def main():
 
     device = 'cuda'
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
-    BATCH_SIZE = args.batchsize * len(args.gpu.split(','))
+    BATCH_SIZE = args.batch_size * len(args.gpu.split(','))
 
     output_dir, ckpt_dir = exp_log_folder_creator(cfg, extra_tag=args.source)
     log_name = 'log_train_dg%s.txt' % datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
@@ -62,30 +60,6 @@ def main():
     test_datasets = list(set(dataset_list) - {args.source})
     logger.info(f'The datasets used for testing: {test_datasets}')
 
-    if args.launcher == 'none':
-        dist_train = False
-        total_gpus = 1
-    else:
-        total_gpus, cfg.LOCAL_RANK = getattr(common_utils, 'init_dist_%s' % args.launcher)(
-            args.tcp_port, args.local_rank, backend='nccl'
-        )
-        dist_train = True
-
-    device = 'cuda'
-    # os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
-    
-    gpu_list = os.environ['CUDA_VISIBLE_DEVICES'] if 'CUDA_VISIBLE_DEVICES' in os.environ.keys() else 'ALL'
-    logger.info('CUDA_VISIBLE_DEVICES=%s' % gpu_list)
-    
-    assert args.batch_size % total_gpus == 0, 'Batch size should match the number of gpus'
-    args.batch_size = args.batch_size // total_gpus
-
-  
-    common_utils.set_random_seed(666 + cfg.LOCAL_RANK)
-    
-    if dist_train:
-        logger.info('total_batch_size: %d' % (total_gpus * args.batch_size))
-    max_epoch_num = cfg["OPTIMIZATION"]["NUM_EPOCHES"]
     # Data loading
     multi_spliter = False
     # when split_config is a dict which means only one split method is used
@@ -108,70 +82,47 @@ def main():
         raise RuntimeError(f"Unsupported Splitter Config {type(split_config)}")
     # split 2 is fullsize
 
-    source_train_dataset, source_train_dataloader, train_sampler_src = build_dataloader(
-        dataset=source_train_dataset,
-        batch_size=args.batch_size,
-        dist=dist_train, workers=4,
-        training=True,
-        merge_all_iters_to_one_epoch=False,
-        total_epochs=max_epoch_num,
-        seed=666 if args.fix_random_seed else None
-    )
-
-    target_train_dataset1, target_train_dataloader, train_sampler_target = build_dataloader(
-        dataset=target_train_dataset1,
-        batch_size=args.batch_size,
-        dist=dist_train, workers=4,
-        training=True,
-        merge_all_iters_to_one_epoch=False,
-        total_epochs=max_epoch_num,
-        seed=666 if args.fix_random_seed else None
-    )
-    
-
     source_test_dataset = create_single_dataset(args.source, status="test", aug=False)
     target_test_dataset1 = create_single_dataset(test_datasets[0], status="test", aug=False)
     target_test_dataset2 = create_single_dataset(test_datasets[-1], status="test", aug=False)
 
-    # if not multi_spliter:
-    num_source_train = len(source_train_dataset)
-    num_target_train1 = len(target_train_dataset1)
-    logger.info(f"Num of source train: {num_source_train}, Num of target train: {num_target_train1}")
+    if not multi_spliter:
+        num_source_train = len(source_train_dataset)
+        num_target_train1 = len(target_train_dataset1)
+        logger.info(f"Num of source train: {num_source_train}, Num of target train: {num_target_train1}")
 
-    #     if cfg.get("CLASS_BALANCE", False):
-    #         sampler_1 = Sampler(source_train_dataset.classes(), class_per_batch=10, batch_size=BATCH_SIZE)
-    #         sampler_2 = Sampler(target_train_dataset1.classes(), class_per_batch=10, batch_size=BATCH_SIZE)
-    #         source_train_dataloader = DataLoader(source_train_dataset, batch_sampler=sampler_1, num_workers=2)
-    #         target_train_dataloader = DataLoader(target_train_dataset1, batch_sampler=sampler_2, num_workers=2)
-    #     else:
-    #         source_train_dataloader = DataLoader(source_train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
-    #                                             drop_last=True)
-    #         target_train_dataloader = DataLoader(target_train_dataset1, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
-    #                                             drop_last=True)
-    # else:
-    #     source_train_dataloaders = []
-    #     target_train_dataloaders = []
-    #     for st,tt in zip(source_train_datasets, target_train_datasets):
-    #         num_source_train = len(st)
-    #         num_target_train1 = len(tt)
-    #         logger.info(f"For Current Split Method: Num of source train: {num_source_train}, Num of target train: {num_target_train1}")
+        if cfg.get("CLASS_BALANCE", False):
+            sampler_1 = Sampler(source_train_dataset.classes(), class_per_batch=10, batch_size=BATCH_SIZE)
+            sampler_2 = Sampler(target_train_dataset1.classes(), class_per_batch=10, batch_size=BATCH_SIZE)
+            source_train_dataloader = DataLoader(source_train_dataset, batch_sampler=sampler_1, num_workers=2)
+            target_train_dataloader = DataLoader(target_train_dataset1, batch_sampler=sampler_2, num_workers=2)
+        else:
+            source_train_dataloader = DataLoader(source_train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
+                                                drop_last=True)
+            target_train_dataloader = DataLoader(target_train_dataset1, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
+                                                drop_last=True)
+    else:
+        source_train_dataloaders = []
+        target_train_dataloaders = []
+        for st,tt in zip(source_train_datasets, target_train_datasets):
+            num_source_train = len(st)
+            num_target_train1 = len(tt)
+            logger.info(f"For Current Split Method: Num of source train: {num_source_train}, Num of target train: {num_target_train1}")
 
-    #         if cfg.get("CLASS_BALANCE", False):
-    #             sampler_1 = Sampler(st.classes(), class_per_batch=10, batch_size=BATCH_SIZE)
-    #             sampler_2 = Sampler(tt.classes(), class_per_batch=10, batch_size=BATCH_SIZE)
-    #             source_train_dataloader = DataLoader(st, batch_sampler=sampler_1, num_workers=2)
-    #             target_train_dataloader = DataLoader(tt, batch_sampler=sampler_2, num_workers=2)
-    #         else:
-    #             source_train_dataloader = DataLoader(st, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
-    #                                                 drop_last=True)
-    #             target_train_dataloader = DataLoader(tt, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
-    #                                                 drop_last=True)
+            if cfg.get("CLASS_BALANCE", False):
+                sampler_1 = Sampler(st.classes(), class_per_batch=10, batch_size=BATCH_SIZE)
+                sampler_2 = Sampler(tt.classes(), class_per_batch=10, batch_size=BATCH_SIZE)
+                source_train_dataloader = DataLoader(st, batch_sampler=sampler_1, num_workers=2)
+                target_train_dataloader = DataLoader(tt, batch_sampler=sampler_2, num_workers=2)
+            else:
+                source_train_dataloader = DataLoader(st, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
+                                                    drop_last=True)
+                target_train_dataloader = DataLoader(tt, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
+                                                    drop_last=True)
 
-    #         source_train_dataloaders.append(source_train_dataloader)
-    #         target_train_dataloaders.append(target_train_dataloader)
+            source_train_dataloaders.append(source_train_dataloader)
+            target_train_dataloaders.append(target_train_dataloader)
 
-    
-    
     num_source_test = len(source_test_dataset)
     num_target_test1 = len(target_test_dataset1)
     num_target_test2 = len(target_test_dataset2)
@@ -179,34 +130,16 @@ def main():
 
     
 
-    # source_test_dataloader = DataLoader(source_test_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
-    #                                     drop_last=True)
-    # target_test_dataloader1 = DataLoader(target_test_dataset1, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
-    #                                      drop_last=True)
-    # target_test_dataloader2 = DataLoader(target_test_dataset2, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
-    #                                      drop_last=True)
-    
-    _, source_test_dataloader, _ = build_dataloader(
-        dataset=source_test_dataset,
-        batch_size=args.batch_size,
-        dist=dist_train, workers=4, training=False
-    )
-
-    _, target_test_dataloader1, _ = build_dataloader(
-        dataset=target_test_dataset1,
-        batch_size=args.batch_size,
-        dist=dist_train, workers=4, training=False
-    )
-
-    _, target_test_dataloader2, _ = build_dataloader(
-        dataset=target_test_dataset2,
-        batch_size=args.batch_size,
-        dist=dist_train, workers=4, training=False
-    )
-    
-    
+    source_test_dataloader = DataLoader(source_test_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
+                                        drop_last=True)
+    target_test_dataloader1 = DataLoader(target_test_dataset1, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
+                                         drop_last=True)
+    target_test_dataloader2 = DataLoader(target_test_dataset2, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
+                                         drop_last=True)
     performance_test_sets = {"source": source_test_dataloader, "test1": target_test_dataloader1,
                              "test2": target_test_dataloader2}
+
+    logger.info(f'batch_size: {BATCH_SIZE}')
 
     best_test_acc = {"source": [0, 0], "test1":[0, 0], "test2":[0, 0]}
     # best_target_acc_epoch + best_target_acc
@@ -216,11 +149,9 @@ def main():
     # AssertionError: daemonic processes are not allowed to have children
 
     # Model
-    model = mM.Net_MDA(layer=str(cfg.get("AdaLayer", 3)))
+    model = mM.Net_MDA(model_name=cfg.get("Model", "Pointnet"))
     logger.info(model)
-    if dist_train:
-        model = nn.parallel.DistributedDataParallel(model, device_ids=[cfg.LOCAL_RANK % torch.cuda.device_count()], broadcast_buffers=False, find_unused_parameters=True)
-
+    model = model.to(device=device)
 
     opt_cfg = cfg["OPTIMIZATION"]
 
@@ -245,23 +176,23 @@ def main():
 
     # Optimizer Setting
     remain_epoch = 50
+    max_epoch_num = opt_cfg["NUM_EPOCHES"]
     LR = opt_cfg["LR"]
     weight_decay = opt_cfg["WEIGHT_DECAY"]
     scaler = opt_cfg["LR_SCALER"]
     pure_cls_epoch = cfg["METHODS"]["PURE_CLS_EPOCH"]
-    sema_adapt_layer_index = int(cfg["METHODS"].get("SEM_LAYER", 2))
 
-    params = [{'params': v} for k, v in model.module.g.named_parameters() if 'pred_offset' not in k]
+    params = [{'params': v} for k, v in model.g.named_parameters() if 'pred_offset' not in k]
 
     optimizer_g = optim.Adam(params, lr=LR, weight_decay=weight_decay)
     lr_schedule_g = optim.lr_scheduler.CosineAnnealingLR(optimizer_g, T_max=max_epoch_num + remain_epoch)
 
-    optimizer_c = optim.Adam([{'params': model.module.c1.parameters()}, {'params': model.module.c2.parameters()}], lr=LR * 2,
+    optimizer_c = optim.Adam([{'params': model.c1.parameters()}, {'params': model.c2.parameters()}], lr=LR * 2,
                              weight_decay=weight_decay)
     lr_schedule_c = optim.lr_scheduler.CosineAnnealingLR(optimizer_c, T_max=max_epoch_num + remain_epoch)
 
-    optimizer_dis = optim.Adam([{'params': model.module.g.parameters()}, {'params': model.module.attention_s.parameters()},
-                                {'params': model.module.attention_t.parameters()}],
+    optimizer_dis = optim.Adam([{'params': model.g.parameters()}, {'params': model.attention_s.parameters()},
+                                {'params': model.attention_t.parameters()}],
                                lr=LR * scaler, weight_decay=weight_decay)
     lr_schedule_dis = optim.lr_scheduler.CosineAnnealingLR(optimizer_dis, T_max=max_epoch_num + remain_epoch)
 
@@ -269,11 +200,6 @@ def main():
 
     for epoch in range(max_epoch_num):
         since_e = time.time()
-        torch.autograd.set_detect_anomaly(True)
-
-        if train_sampler_src is not None:
-            train_sampler_src.set_epoch(epoch)
-            train_sampler_target.set_epoch(epoch)
 
         lr_schedule_g.step(epoch=epoch)
         lr_schedule_c.step(epoch=epoch)
@@ -294,17 +220,15 @@ def main():
         cons = math.sin((epoch + 1) / max_epoch_num * math.pi / 2)
 
         # choose for current epoch, which split method will be used
-        # if multi_spliter:
-        #     idx = epoch % len(source_train_dataloaders)
-        #     source_train_dataloader = source_train_dataloaders[idx]
-        #     target_train_dataloader = target_train_dataloaders[idx]
+        if multi_spliter:
+            idx = epoch % len(source_train_dataloaders)
+            source_train_dataloader = source_train_dataloaders[idx]
+            target_train_dataloader = target_train_dataloaders[idx]
         
         # Training
         for batch_idx, (batch_s, batch_t) in enumerate(zip(source_train_dataloader, target_train_dataloader)):
             data, label = batch_s
             data_t, label_t = batch_t
-            assert data.shape[0] == label.shape[0], f"src: {data.shape[0]} vs {label.shape[0]}"
-            assert data_t.shape[0] == label_t.shape[0],  f"target: {data_t.shape[0]} vs {label_t.shape[0]}"
 
             # 64 * 3 * 1024
             data = data.to(device=device)
@@ -313,16 +237,14 @@ def main():
             data_t = data_t.to(device=device)
             label_t = label_t.to(device=device).long()
             
+
             # Senmantic MMD loss
             # data: 64 * 3 * 1024 * 1
             pred_s1, pred_s2, sem_fea_s1, sem_fea_s2 = model(data, semantic_adaption=True)
-            assert pred_s1.shape[0] == label.shape[0], f"s1: {pred_s1.shape[0]} vs {label.shape[0]}"
-            assert pred_s2.shape[0] == label.shape[0], f"s2: {pred_s2.shape[0]} vs {label.shape[0]}"
-            
             if cfg["METHODS"].get("GRL", None):
-                pred_t1, pred_t2, sem_fea_t1, sem_fea_t2 = model(data_t, semantic_adaption=True, constant=cons, adaptation=True, sem_ada_layer=sema_adapt_layer_index)
+                pred_t1, pred_t2, sem_fea_t1, sem_fea_t2 = model(data_t, semantic_adaption=True, constant=cons, adaptation=True)
             else:
-                pred_t1, pred_t2, sem_fea_t1, sem_fea_t2 = model(data_t, semantic_adaption=True, sem_ada_layer=sema_adapt_layer_index)
+                pred_t1, pred_t2, sem_fea_t1, sem_fea_t2 = model(data_t, semantic_adaption=True)
             # no need for GRL now
             # sem_fea_s1:64 * 256
 
@@ -387,15 +309,15 @@ def main():
                 optimizer_dis.zero_grad()
 
                 
-                loss_geo_total = loss_geo_total + loss_geo_mmd.item() * data.size(0)
+                loss_geo_total += loss_geo_mmd.item() * data.size(0)
                 if loss_sem_mmd is not None:
-                    loss_sem_total = loss_sem_total + loss_sem_mmd.item() * data.size(0)
+                    loss_sem_total += loss_sem_mmd.item() * data.size(0)
 
-            data_total = data_total + data.size(0)
-            data_t_total = data_t_total + data_t.size(0)
+            data_total += data.size(0)
+            data_t_total += data_t.size(0)
 
-            loss_cls_total = loss_cls_total +  loss_cls.item() * data.size(0)
-            loss_adv_total = loss_adv_total +  loss_adv.item() * data.size(0)
+            loss_cls_total += loss_cls.item() * data.size(0)
+            loss_adv_total += loss_adv.item() * data.size(0)
 
             if (batch_idx + 1) % 10 == 0:
                 logger.info(f"Train Epoch {epoch} [{data_total} {data_t_total}/{num_source_train}:] loss_cls {loss_cls_total / data_total} ")
@@ -443,8 +365,6 @@ def main():
         time_pass_e = time.time() - since_e
         logger.info('The {} epoch takes {:.0f}m {:.0f}s'.format(epoch, time_pass_e // 60, time_pass_e % 60))
         logger.info('****************Finished One Epoch****************')
-
-        # break # Test for only one loop to debug
 
 
 if __name__ == '__main__':

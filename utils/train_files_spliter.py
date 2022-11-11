@@ -29,7 +29,10 @@ def split_dataset(dataset_type, split_config, logger, status='train'):
     # index_config_naming = str(datetime.datetime.now()) + split_config["split_method"] + "_" + str(
     #     split_config["sample_rate"]) + ".pkl"
     index_file_extra_tag = split_config.get("EXTRA_TAG", None)
-    if index_file_extra_tag and index_file_extra_tag != "Datetime":
+    index_file = split_config.get("FILE", None)
+    if index_file:
+        index_config_naming = split_config["FILE"]
+    elif index_file_extra_tag and index_file_extra_tag != "Datetime":
         index_config_naming = "size_" + str(size_usage) + split_config["METHOD"] + "_" + str(
             split_config["SAMPLE_RATE"]) + "_" + str(index_file_extra_tag) + ".pkl"
     elif index_file_extra_tag and index_file_extra_tag == "Datetime":
@@ -48,8 +51,16 @@ def split_dataset(dataset_type, split_config, logger, status='train'):
             index_subset_2 = indexs['index2']
 
     if index_subset_1 is None:
-        if split_config["METHOD"] == "Random":
-            dataset_size = full_pts.shape[0]
+        dataset_size = full_pts.shape[0]
+        if "Random" in split_config["METHOD"]:
+            if split_config["METHOD"] == "RandomAblation":
+                ration = 4
+                dataset_size = dataset_size // ration - 1
+                # sampled_index = np.random.randint(low=0, high=dataset_size, size=dataset_size)
+                # full_pts = full_pts[sampled_index, :]
+                # full_label = full_label[sampled_index]
+                full_pts, full_label = include_sud_dataset_per_class(dataset_type=dataset_type, sub_ration=ration)
+                
             index_array = np.arange(dataset_size)
 
             subset_size = int(dataset_size * split_config["SAMPLE_RATE"])
@@ -91,6 +102,12 @@ def split_dataset(dataset_type, split_config, logger, status='train'):
 
         elif split_config["METHOD"] == "Geometric":
             return include_dataset_from_splitter(dataset_type, split_config, method="geometric")
+        elif split_config["METHOD"] == "GeometricAblation":
+            return include_dataset_from_splitter(dataset_type, split_config, method="geometric", ablation=True)
+        elif split_config["METHOD"] == "ClusterAblation":
+            return include_dataset_from_splitter(dataset_type, split_config, method="kmeans", ablation=True)
+        elif split_config["METHOD"] == "EntropyAblation":
+            return include_dataset_from_splitter(dataset_type, split_config, method="entropy", ablation=True)
         else:
             raise NotImplementedError("Not Implemented Error")
     else:
@@ -106,6 +123,17 @@ def split_dataset(dataset_type, split_config, logger, status='train'):
                 }
             }
         return dataset_spliter
+
+
+def include_sud_dataset_per_class(dataset_type, status='train', sub_ration=4):
+    sampled_pts, sampled_labels = [], []
+    for i in range(num_class):
+        cls_pts, cls_labels = include_dataset_one_class(dataset_type=dataset_type, cls=i, status=status)
+        cls_size = len(cls_pts)
+        sampled_pts.extend(cls_pts[np.random.randint(0, cls_size, cls_size//sub_ration)])
+        sampled_labels.extend(cls_labels[np.random.randint(0, cls_size, cls_size//sub_ration)])
+
+    return np.array(sampled_pts), np.array(sampled_labels)
 
 
 def include_dataset_full_information(dataset_type, status='train'):
@@ -133,14 +161,53 @@ def include_dataset_one_class(dataset_type, status='train', cls=0):
     return full_pts[index_cls], full_labels[index_cls]
 
 
-def include_dataset_from_splitter(dataset_type, spliter_config, subset_num=2, method="kmeans"):
+def include_dataset_from_splitter(dataset_type, spliter_config, subset_num=2, method="kmeans", ablation=False):
     spliter_path = os.path.join(data_root, dataset_type, "spliter")
     if not os.path.exists(spliter_path):
         raise RuntimeError("No Spliter Folder Found, Need to Generate Dataset Cluster First!")
 
     subset_1_pts, subset_1_labels = [], []
     subset_2_pts, subset_2_labels = [], []  # could be full-size
-    if "kmeans" in method or "geo" in method:
+    if  ablation:
+
+        if method == "entropy":
+            data_npy = os.path.join(spliter_path, "entropy_-1_1_857_entropy_0.7777933478355408.npy")
+            label_npy = os.path.join(spliter_path, "entropy_-1_1_857_labels.npy")
+
+            pts_ = np.load(data_npy)
+            labels_ = np.load(label_npy)
+
+            index_array = np.arange(pts_.shape[0])
+            index_subset_1 = np.random.choice(
+                index_array, replace=False, size=pts_.shape[0]//2)
+            index_subset_2 = np.setdiff1d(index_array, index_subset_1)
+
+            subset_1_pts = pts_[index_subset_1, :]
+            subset_1_labels = labels_[index_subset_1]
+
+            subset_2_pts = pts_[index_subset_2, :]
+            subset_2_labels = labels_[index_subset_2]
+        else:
+        # direct load 1 split every class
+            cluster_num = len(glob.glob(str(spliter_path) + "/" + method + "_1_*.npy"))
+            subset_1_cluster = int(cluster_num * spliter_config["SAMPLE_RATE"])
+            sample_method = "random"
+            for i in range(num_class):
+                subset_cls_1 = load_splitter_npy_list(spliter_path, spliter_config, method, i, sample_method, subset_1_cluster, ablation=ablation)
+
+                cls_1_pts, cls_1_labels = load_npy_pts_and_labels(subset_cls_1, cls=i)
+                if "geo" in method:
+                    cur_size = len(cls_1_pts)
+                    cls_1_pts = cls_1_pts[:cur_size//2]
+                    cls_1_labels = cls_1_labels[:cur_size//2]
+
+                cur_size = len(cls_1_pts)
+                subset_1_pts.extend(cls_1_pts[:cur_size//2])
+                subset_1_labels.extend(cls_1_labels[:cur_size//2])
+                subset_2_pts.extend(cls_1_pts[cur_size//2:-1])
+                subset_2_labels.extend(cls_1_labels[cur_size//2:-1])
+
+    elif "kmeans" in method or "geo" in method:
         cluster_num = len(glob.glob(str(spliter_path) + "/" + method + "_1_*.npy"))
         subset_1_cluster = int(cluster_num * spliter_config["SAMPLE_RATE"])
         sample_method = "random"
@@ -183,12 +250,101 @@ def include_dataset_from_splitter(dataset_type, spliter_config, subset_num=2, me
     }
     return dataset_spliter
 
+def create_train_val_from_splitter(dataset_type):
+    dataset_path = os.path.join(data_root, dataset_type)
+    spliter_path = os.path.join(data_root, dataset_type, "spliter")
+    train_list = []
+    val_list = []
+
+    for i in range(10):
+        t_cls, v_cls = create_train_val_from_splitter_cls(spliter_path, cls=i)
+        train_list.extend(t_cls)
+        val_list.extend(v_cls)
+
+    train_list_file = os.path.join(spliter_path, "rebu_train.txt")
+    val_list_file = os.path.join(spliter_path, "rebu_val.txt")
+
+    with open(train_list_file, "w") as train_f:
+        for f in train_list:
+            train_f.write("%s \n" % f)
+
+    with open(val_list_file, "w") as val_f:
+        for f in val_list:
+            val_f.write("%s \n" % f)
+
+def create_train_val_from_splitter_cls(spliter_path, method="kmeans", cls=1):
+    cls_npy_list = glob.glob(str(spliter_path) + "/" + method + "_" + str(cls) + "_*.npy")
+    cls_npy_list = [npy for npy in cls_npy_list if "_label" not in npy]
+    cls_npy_list = [npy for npy in cls_npy_list if ".npy" in npy]
+    sort_with_entropy(cls_list=cls_npy_list)
+    train_set = [cls_npy_list[0], cls_npy_list[-1]]
+    val_set = [cls_npy_list[1], cls_npy_list[2]]
+
+    return train_set, val_set
+
+def load_dataset_from_split_list(file_list, splited=False):
+    pts_list = []
+    cls_list = []
+
+    with open(file_list, "r") as f:
+        for line in f:
+            npy = line[:-1]
+            pts_list.append(npy)
+            cls_list.append(int(npy.split("kmeans_")[-1].split("_")[0]))
+    
+    for npy, cls_ in zip(pts_list, cls_list):
+        print(f"cls {cls_} with file: {npy}")
+
+    
+    if not splited:
+        pts_, labels_ = [], []
+        for npy, cls_ in zip(pts_list, cls_list):
+            pts_cls = np.load(npy.strip()).tolist()
+            lbl_cls =  (np.ones(len(pts_cls)) * cls_).tolist()
+
+            pts_.extend(pts_cls)
+            labels_.extend(lbl_cls)
+
+        return np.array(pts_), np.array(labels_)
+
+    else:
+        subset1_pts, subset1_labels = [], []
+        subset2_pts, subset2_labels = [], []
+        for idx, (npy, cls_) in enumerate(zip(pts_list, cls_list)):
+            pts_cls = np.load(npy.strip()).tolist()
+            lbl_cls =  (np.ones(len(pts_cls)) * cls_).tolist()
+
+            if idx % 2 == 0:
+                subset1_pts.extend(pts_cls)
+                subset1_labels.extend(lbl_cls)
+            else:
+                subset2_pts.extend(pts_cls)
+                subset2_labels.extend(lbl_cls)
+
+        dataset_spliter = {
+                "subset_1": {
+                    "pts": np.array(subset1_pts),
+                    "label":np.array(subset1_labels)
+                },
+
+                "subset_2": {
+                    "pts": np.array(subset2_pts),
+                    "label": np.array(subset2_labels)
+                }
+            }
+        return dataset_spliter
 
 def load_splitter_npy_list(path, spliter_config, method="kmeans", cls=-1, \
-                            choice_method="random", subset_1_cluster=2, choice_list=None):
+                            choice_method="random", subset_1_cluster=2, choice_list=None, ablation=False):
     cls_npy_list = glob.glob(str(path) + "/" + method + "_" + str(cls) + "_*.npy")
     cls_npy_list = [npy for npy in cls_npy_list if "_label" not in npy]
-    if choice_method == "random":
+    cls_npy_list = [npy for npy in cls_npy_list if ".npy" in npy]
+    if ablation:
+        choice = np.random.randint(len(cls_npy_list))
+        print("Chose the split: ", cls_npy_list[choice: choice+1])
+        return  cls_npy_list[choice: choice+1]
+
+    elif choice_method == "random":
         random.shuffle(cls_npy_list)
         subset_cls_1 = cls_npy_list[0:subset_1_cluster]
         if spliter_config["SUBSET_FULLSIZE"]:
@@ -326,14 +482,20 @@ def rename_npy_files(data_path):
 
 
 if __name__ == "__main__":
-    init_dataset = False
-    if init_dataset:
-        # rename_npy_files(os.path.join(scannet_path, "plant"))
-        funcs = {
-            "scannet": extract_scannet_to_npy,
-            "shapenet": extract_shapenet_to_npy,
-            "modelnet": extract_modelnet_to_npy
-        }
-        for dataset in ["scannet", "shapenet", "modelnet"]:
-            dataset_path = os.path.join(data_root, dataset)
-            funcs[dataset](dataset_path)
+    # init_dataset = False
+    # if init_dataset:
+    #     # rename_npy_files(os.path.join(scannet_path, "plant"))
+    #     funcs = {
+    #         "scannet": extract_scannet_to_npy,
+    #         "shapenet": extract_shapenet_to_npy,
+    #         "modelnet": extract_modelnet_to_npy
+    #     }
+    #     for dataset in ["scannet", "shapenet", "modelnet"]:
+    #         dataset_path = os.path.join(data_root, dataset)
+    #         funcs[dataset](dataset_path)
+    
+    dataset_type = "modelnet"
+    for dataset_type in dataset_list:
+        create_train_val_from_splitter(dataset_type)
+        spliter_path = os.path.join(data_root, dataset_type, "spliter")
+        load_dataset_from_split_list(os.path.join(spliter_path, "rebu_train.txt"))

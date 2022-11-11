@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 
 
 def eval_worker(eval_dict, logger):
@@ -16,6 +17,12 @@ def eval_worker(eval_dict, logger):
         source_flag = True
     else:
         source_flag = False
+    
+    if "cls_eval" in eval_dict:
+        cls_eval = eval_dict["cls_eval"]
+    else:
+        cls_eval = False
+
     logger.info(f"Current eval on: {dataset} {eval_dict['dataset_name']}")
     loss_total = 0
     correct_total = 0
@@ -23,6 +30,9 @@ def eval_worker(eval_dict, logger):
     acc_class = torch.zeros(10, 1)
     acc_to_class = torch.zeros(10, 1)
     acc_to_all_class = torch.zeros(10, 10)
+
+    class_acc = np.zeros((num_class, 3))
+    mean_correct = []
 
     for batch_idx, (data, label) in enumerate(dataloader):
         data = data.to(device=device)
@@ -36,15 +46,15 @@ def eval_worker(eval_dict, logger):
         loss = criterion(output, label)
         _, pred = torch.max(output, 1)
 
-        if source_flag:
+        if source_flag or cls_eval:
             acc = pred == label
-            for j in range(num_class):
-                label_j_list = (label == j)
-                acc_class[j] += (pred[acc] == j).sum().cpu().float()
-                acc_to_class[j] += label_j_list.sum().cpu().float()
-                for k in range(num_class):
-                    acc_to_all_class[j, k] += (pred[label_j_list]
-                                               == k).sum().cpu().float()
+            for j in np.unique(label.cpu()):
+                classacc = pred[label == j].eq(label[label == j].long().data).cpu().sum()
+                class_acc[j, 0] += classacc.item() / float(data[label == j].size()[0])
+                class_acc[j, 1] += 1
+
+        correct = pred.eq(label.long().data).cpu().sum()
+        mean_correct.append(correct.item() / float(data.size()[0]))
 
         loss_total += loss.item() * data.size(0)
         correct_total += torch.sum(pred == label)
@@ -53,11 +63,20 @@ def eval_worker(eval_dict, logger):
     pred_loss = loss_total / data_total
     pred_acc = correct_total.double() / data_total
 
+    class_acc[:, 2] = class_acc[:, 0] / class_acc[:, 1]
+    class_acc_ = np.mean(class_acc[:, 2])
+    instance_acc = np.mean(mean_correct)
+
     if pred_acc > best_target_acc:
         best_target_acc = pred_acc
         best_target_acc_epoch = epoch
     logger.info(
         f'On dataset {dataset} :{epoch} [overall_acc: {pred_acc} Best Tar Acc: {best_target_acc} on Source Train Epoch {best_target_acc_epoch}]')
+
+    if source_flag or cls_eval:
+        
+        logger.info(f"Cls-wise eval: {class_acc[:, 2]}")
+        logger.info(f"compared eval: {instance_acc} and avg: {class_acc_}")
 
     result = {
         "dataset": dataset,

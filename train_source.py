@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from model.model_pointnet import Pointnet_cls as Pointnet_cls
+from model.model_pointnet import Pointnet_cls, Pointnet2_cls, DGCNN
 from data.dataloader import Modelnet40_data, Shapenet_data, Scannet_data_h5
 from data.dataloader import create_single_dataset
 
@@ -23,7 +23,7 @@ def main():
 
     device = 'cuda'
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
-    BATCH_SIZE = args.batchsize * len(args.gpu.split(','))
+    BATCH_SIZE = args.batch_size * len(args.gpu.split(','))
 
     output_dir, ckpt_dir = exp_log_folder_creator(cfg, extra_tag=args.source)
     log_name = 'log_train_source%s.txt' % datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
@@ -66,8 +66,14 @@ def main():
         num_source_train, num_source_test, num_target_test1, num_target_test2))
     logger.info(f'batch_size: {BATCH_SIZE}')
 
+    num_cls = cfg["DATASET"]["NUM_CLASS"]
     # Model
-    model = Pointnet_cls()
+    if cfg.get("Model", "PointNet") == "PointNet2":
+        model = Pointnet2_cls(num_class=num_cls)
+    elif cfg.get("Model", "PointNet") == "DGCNN":
+        model = DGCNN()
+    else:
+        model = Pointnet_cls(num_class=num_cls)
     model = model.to(device=device)
     criterion = nn.CrossEntropyLoss()
     criterion = criterion.to(device=device)
@@ -88,8 +94,8 @@ def main():
     # best_target_acc_epoch + best_target_acc
 
     for epoch in range(max_epoch_num):
+        since_e = time.time()
         lr_schedule.step(epoch=epoch)
-        print(lr_schedule.get_lr())
         writer.add_scalar('lr', lr_schedule.get_lr(), epoch)
 
         model.train()
@@ -149,6 +155,10 @@ def main():
                 best_test_acc[eval_dataset][0] = eval_result["best_target_acc_epoch"]
                 writer_item = 'acc/' + eval_result["dataset"] + "_test_acc"
                 writer.add_scalar(writer_item, eval_result["best_target_acc"], epoch)
+        
+        time_pass_e = time.time() - since_e
+        logger.info('The {} epoch takes {:.0f}m {:.0f}s'.format(epoch, time_pass_e // 60, time_pass_e % 60))
+        logger.info('****************Finished One Epoch****************')
             
 
 if __name__ == '__main__':

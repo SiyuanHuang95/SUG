@@ -3,6 +3,9 @@ EXTRA_TAG: Source_Baseline/test3
 DATA_ROOT: /point_dg/data
 LOGS_ROOT: /point_dg/logs
 
+# Model: Pointnet2
+Model: DGCNN
+
 DATASET:
     NUM_CLASS: 10
 

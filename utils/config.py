@@ -12,7 +12,7 @@ def parser_config():
     # basic parameter for training
     parser.add_argument('--cfg', type=str, default=None, help='specify the config for training')
     parser.add_argument('--source', '-s', type=str, help='source dataset', default='scannet')
-    parser.add_argument('--batchsize', '-b', type=int, help='batch size', default=64)
+    parser.add_argument('--batch_size', '-b', type=int, help='batch size', default=64)
     parser.add_argument('--epochs', '-e', type=int, help='training epoch', default=300)
     parser.add_argument('--gpu', '-g', type=str, help='cuda id', default='0')
 
@@ -23,9 +23,11 @@ def parser_config():
 
     parser.add_argument('--set', dest='set_cfgs', default=None, nargs=argparse.REMAINDER,
                         help='set extra config keys if needed [Used in last position]')
-    
+    parser.add_argument('--launcher', choices=['none', 'pytorch', 'slurm'], default='none')
+    parser.add_argument('--tcp_port', type=int, default=18888, help='tcp port for distrbuted training')
+    parser.add_argument('--local_rank', type=int, default=0, help='local rank for distributed training')
     parser.add_argument('--fix_random_seed', action='store_true', default=False, help='')
-
+    
     args = parser.parse_args()
     
     cfg_from_yaml_file(args.cfg, cfg)

@@ -6,23 +6,23 @@ import torch.nn.functional as F
 from torch.autograd import Variable,Function
 
 class conv_2d(nn.Module):
-    def __init__(self, in_ch, out_ch, kernel, activation='relu'):
+    def __init__(self, in_ch, out_ch, kernel, activation='relu', bias=True):
         super(conv_2d, self).__init__()
         if activation == 'relu':
             self.conv = nn.Sequential(
-                nn.Conv2d(in_ch, out_ch, kernel_size=kernel),
+                nn.Conv2d(in_ch, out_ch, kernel_size=kernel, bias=bias),
                 nn.BatchNorm2d(out_ch),
-                nn.ReLU(inplace=True)
+                nn.ReLU(inplace=False)
             )
         elif activation == 'tanh':
             self.conv = nn.Sequential(
-                nn.Conv2d(in_ch, out_ch, kernel_size=kernel),
+                nn.Conv2d(in_ch, out_ch, kernel_size=kernel, bias=bias),
                 nn.BatchNorm2d(out_ch),
                 nn.Tanh()
             )
         elif activation == 'leakyrelu':
             self.conv = nn.Sequential(
-                nn.Conv2d(in_ch, out_ch, kernel_size=kernel),
+                nn.Conv2d(in_ch, out_ch, kernel_size=kernel, bias=bias),
                 nn.BatchNorm2d(out_ch),
                 nn.LeakyReLU()
             )
@@ -33,21 +33,22 @@ class conv_2d(nn.Module):
 
 
 class fc_layer(nn.Module):
-    def __init__(self, in_ch, out_ch, bn=True, activation='leakyrelu'):
+    def __init__(self, in_ch, out_ch, bn=True, activation='leakyrelu', bias=False):
         super(fc_layer, self).__init__()
         if activation == 'relu':
-            self.ac = nn.ReLU(inplace=True)
+            self.ac = nn.ReLU(inplace=False)
         elif activation == 'leakyrelu':
-            self.ac = nn.LeakyReLU()
+            self.ac = nn.LeakyReLU(negative_slope=0.2, inplace=False)
         if bn:
             self.fc = nn.Sequential(
-                nn.Linear(in_ch, out_ch),
-                nn.BatchNorm1d(out_ch),
+                nn.Linear(in_ch, out_ch, bias=bias),
+                # nn.BatchNorm1d(out_ch),
+                nn.LayerNorm(out_ch),
                 self.ac
             )
         else:
             self.fc = nn.Sequential(
-                nn.Linear(in_ch, out_ch),
+                nn.Linear(in_ch, out_ch, bias=bias),
                 self.ac
             )
 
@@ -68,9 +69,12 @@ class transform_net(nn.Module):
         self.fc2 = fc_layer(512, 256)
         self.fc3 = nn.Linear(256, K * K)
 
-    def forward(self, x):
+    def forward(self, x, DGCNN_Flag=False):
         x = self.conv2d1(x)
         x = self.conv2d2(x)
+        if DGCNN_Flag:
+            x = x.max(dim=-1, keepdim=False)[0]
+            x = torch.unsqueeze(x, dim=3)
         x = self.conv2d3(x)
         x, _ = torch.max(x, dim=2, keepdim=False)
         x = x.view(x.size(0), -1)
@@ -170,3 +174,37 @@ class focal_loss(nn.Module):
         else:
             loss = loss.sum()
         return loss
+
+def knn(x, k):
+    inner = -2 * torch.matmul(x.transpose(2, 1), x)
+    xx = torch.sum(x ** 2, dim=1, keepdim=True)
+    pairwise_distance = -xx - inner - xx.transpose(2, 1)
+
+    # (batch_size, num_points, k)
+    idx = pairwise_distance.topk(k=k, dim=-1)[1]
+    return idx
+    
+
+def get_graph_feature(x, k=20, idx=None):
+    batch_size = x.size(0)
+    num_points = x.size(2)
+    x = x.view(batch_size, -1, num_points)
+    if idx is None:
+        idx = knn(x, k=k)  # (batch_size, num_points, k)
+    # Run on cpu or gpu
+    idx_base = torch.arange(0, batch_size, device='cuda:0').view(-1, 1, 1) * num_points
+
+    idx = idx + idx_base
+
+    idx = idx.view(-1)
+
+    _, num_dims, _ = x.size()
+
+    x = x.transpose(2, 1).contiguous()  # (batch_size, num_points, num_dims)  -> (batch_size*num_points, num_dims)
+    feature = x.view(batch_size * num_points, -1)[idx, :]  # matrix [k*num_points*batch_size,3]
+    feature = feature.view(batch_size, num_points, k, num_dims)
+    x = x.view(batch_size, num_points, 1, num_dims).repeat(1, 1, k, 1)
+
+    feature = torch.cat((feature - x, x), dim=3).permute(0, 3, 1, 2)
+
+    return feature
