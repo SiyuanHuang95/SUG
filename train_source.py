@@ -81,6 +81,7 @@ def main():
     else:
         model = Pointnet_cls(num_class=num_cls)
     model = model.to(device=device)
+    logger.info(model)
     criterion = nn.CrossEntropyLoss()
     criterion = criterion.to(device=device)
 

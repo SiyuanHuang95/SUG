@@ -1,23 +1,6 @@
 # Domain Generalization for 3D Point Cloud 
 
-## TODO List
-[ ] 3D Geometric-aware MMD alignment
-
-    [X] Use 3D descriptor to split the dataset, like ICP
-    [ ] Register the point cloud before MMD
-    [ ] Concat the feature from naive FE and the feature after register
-
-[ ] Dimain Aligment
-
-    [ ] MMD
-    [ ] Domain discriminator
-
-[ ] Dual Alignment
-
-    [ ] Entropy -> Cluster
-    [ ] Cluster -> Entropy
-
-[ ] Meta-Learning Framework
+Branch mainly for the KPConv and Point Transformer.
 
 ## Requirements
 
