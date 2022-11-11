@@ -9,6 +9,15 @@ import torch.multiprocessing as mp
 import random
 
 
+def set_random_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    print("Set the Random Seed!")
+
 def get_dist_info(return_gpu_per_machine=False):
     if torch.__version__ < '1.0':
         initialized = dist._initialized

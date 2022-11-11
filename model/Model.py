@@ -1,9 +1,9 @@
-from sqlite3 import adapt
+# from sqlite3 import adapt
 from model.model_utils import *
-from model.pointnet2_utils import PointNetSetAbstraction
-from model.pointnet2.pointnet2_modules import PointnetFPModule, PointnetSAModuleMSG
+# from model.pointnet2_utils import PointNetSetAbstraction
+# from model.pointnet2.pointnet2_modules import PointnetFPModule, PointnetSAModuleMSG
 
-import model.pointnet2.pytorch_utils as pt_utils
+# import model.pointnet2.pytorch_utils as pt_utils
 
 import torch
 import torch.nn as nn

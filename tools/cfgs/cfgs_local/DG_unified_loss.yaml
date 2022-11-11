@@ -1,7 +1,7 @@
-EXPERIMENT: DG_exp
-EXTRA_TAG: DG_Baseline_LOSS_DLSA
-DATA_ROOT: /home/siyuan/4-data/PointDA_data
-LOGS_ROOT: /home/siyuan/4-data/PointDA_data
+EXPERIMENT: DG_reb
+EXTRA_TAG:  DG_SubAlignment
+DATA_ROOT: /hdd1/huangsiyuan/PointDA_data/
+LOGS_ROOT: /hdd1/huangsiyuan/PointDA_data/
 
 DATASET:
     NUM_CLASS: 10

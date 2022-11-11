@@ -43,3 +43,38 @@ def visualize_feature_scatter(features, cls=None, labels_=None, cluster_centers=
         print(f"Save Clustering Vis to {file_path}")
     else:
         plt.show()
+
+
+def visualize_tsne(features, cls=None, labels_=None, cluster_centers=None, file_path=None):
+    colors = ['b', 'g','r', 'olive','teal', 'y', 'k','violet', 'purple', 'gold']
+    fig, ax = plt.subplots()
+    
+    if labels_ is not None:
+        if features.shape[-1] <= 2:
+            ax = plt.axes()
+        else:
+            ax = plt.axes(projection='3d')
+        for k, col in zip(range(10), colors):
+            my_members = labels_ == k
+            # cluster_center = cluster_centers[k]
+            if features.shape[-1] <= 2:
+                ax.plot(features[my_members, 0], features[my_members, 1], linestyle="None", markerfacecolor=col, marker=".")
+            else:
+                ax.scatter3D(features[my_members, 0], features[my_members, 1], features[my_members, 2], c=col)
+    else:
+        if features.shape[-1] > 2:
+            ax = plt.axes(projection='3d')
+            ax.scatter3D(features[:, 0], features[:, 1], features[:, 2], "w")
+        else:
+            plt.scatter(features[:, 0], features[:, 1])
+    plt.axis('off')
+    ax.set_axis_off()
+    if cls is not None:
+        title = "Clustering Result for cls " + str(cls)
+        plt.title(title)
+
+    if file_path:
+        fig.savefig(file_path, dpi=1200)
+        print(f"Save Clustering Vis to {file_path}")
+    else:
+        plt.show()

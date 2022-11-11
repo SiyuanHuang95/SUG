@@ -7,10 +7,11 @@ import pickle
 import random
 import datetime
 
-data_root = "/point_dg/data"
+# data_root = "/point_dg/data"
 # data_root = "/data/point_cloud_classification/PointDA_data"
 # data_root = "/mnt/lustre/huangsiyuan/data/PointDA_data"
 # data_root = "/home/siyuan/4-data/PointDA_data"
+data_root = "/hdd1/huangsiyuan/PointDA_data/"
 num_class = 10
 dataset_list = ["scannet", "shapenet", "modelnet"]
 
@@ -249,6 +250,89 @@ def include_dataset_from_splitter(dataset_type, spliter_config, subset_num=2, me
     }
     return dataset_spliter
 
+def create_train_val_from_splitter(dataset_type):
+    dataset_path = os.path.join(data_root, dataset_type)
+    spliter_path = os.path.join(data_root, dataset_type, "spliter")
+    train_list = []
+    val_list = []
+
+    for i in range(10):
+        t_cls, v_cls = create_train_val_from_splitter_cls(spliter_path, cls=i)
+        train_list.extend(t_cls)
+        val_list.extend(v_cls)
+
+    train_list_file = os.path.join(spliter_path, "rebu_train.txt")
+    val_list_file = os.path.join(spliter_path, "rebu_val.txt")
+
+    with open(train_list_file, "w") as train_f:
+        for f in train_list:
+            train_f.write("%s \n" % f)
+
+    with open(val_list_file, "w") as val_f:
+        for f in val_list:
+            val_f.write("%s \n" % f)
+
+def create_train_val_from_splitter_cls(spliter_path, method="kmeans", cls=1):
+    cls_npy_list = glob.glob(str(spliter_path) + "/" + method + "_" + str(cls) + "_*.npy")
+    cls_npy_list = [npy for npy in cls_npy_list if "_label" not in npy]
+    cls_npy_list = [npy for npy in cls_npy_list if ".npy" in npy]
+    sort_with_entropy(cls_list=cls_npy_list)
+    train_set = [cls_npy_list[0], cls_npy_list[-1]]
+    val_set = [cls_npy_list[1], cls_npy_list[2]]
+
+    return train_set, val_set
+
+def load_dataset_from_split_list(file_list, splited=False):
+    pts_list = []
+    cls_list = []
+
+    with open(file_list, "r") as f:
+        for line in f:
+            npy = line[:-1]
+            pts_list.append(npy)
+            cls_list.append(int(npy.split("kmeans_")[-1].split("_")[0]))
+    
+    for npy, cls_ in zip(pts_list, cls_list):
+        print(f"cls {cls_} with file: {npy}")
+
+    
+    if not splited:
+        pts_, labels_ = [], []
+        for npy, cls_ in zip(pts_list, cls_list):
+            pts_cls = np.load(npy.strip()).tolist()
+            lbl_cls =  (np.ones(len(pts_cls)) * cls_).tolist()
+
+            pts_.extend(pts_cls)
+            labels_.extend(lbl_cls)
+
+        return np.array(pts_), np.array(labels_)
+
+    else:
+        subset1_pts, subset1_labels = [], []
+        subset2_pts, subset2_labels = [], []
+        for idx, (npy, cls_) in enumerate(zip(pts_list, cls_list)):
+            pts_cls = np.load(npy.strip()).tolist()
+            lbl_cls =  (np.ones(len(pts_cls)) * cls_).tolist()
+
+            if idx % 2 == 0:
+                subset1_pts.extend(pts_cls)
+                subset1_labels.extend(lbl_cls)
+            else:
+                subset2_pts.extend(pts_cls)
+                subset2_labels.extend(lbl_cls)
+
+        dataset_spliter = {
+                "subset_1": {
+                    "pts": np.array(subset1_pts),
+                    "label":np.array(subset1_labels)
+                },
+
+                "subset_2": {
+                    "pts": np.array(subset2_pts),
+                    "label": np.array(subset2_labels)
+                }
+            }
+        return dataset_spliter
 
 def load_splitter_npy_list(path, spliter_config, method="kmeans", cls=-1, \
                             choice_method="random", subset_1_cluster=2, choice_list=None, ablation=False):
@@ -398,14 +482,20 @@ def rename_npy_files(data_path):
 
 
 if __name__ == "__main__":
-    init_dataset = False
-    if init_dataset:
-        # rename_npy_files(os.path.join(scannet_path, "plant"))
-        funcs = {
-            "scannet": extract_scannet_to_npy,
-            "shapenet": extract_shapenet_to_npy,
-            "modelnet": extract_modelnet_to_npy
-        }
-        for dataset in ["scannet", "shapenet", "modelnet"]:
-            dataset_path = os.path.join(data_root, dataset)
-            funcs[dataset](dataset_path)
+    # init_dataset = False
+    # if init_dataset:
+    #     # rename_npy_files(os.path.join(scannet_path, "plant"))
+    #     funcs = {
+    #         "scannet": extract_scannet_to_npy,
+    #         "shapenet": extract_shapenet_to_npy,
+    #         "modelnet": extract_modelnet_to_npy
+    #     }
+    #     for dataset in ["scannet", "shapenet", "modelnet"]:
+    #         dataset_path = os.path.join(data_root, dataset)
+    #         funcs[dataset](dataset_path)
+    
+    dataset_type = "modelnet"
+    for dataset_type in dataset_list:
+        create_train_val_from_splitter(dataset_type)
+        spliter_path = os.path.join(data_root, dataset_type, "spliter")
+        load_dataset_from_split_list(os.path.join(spliter_path, "rebu_train.txt"))

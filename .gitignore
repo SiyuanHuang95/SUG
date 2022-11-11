@@ -34,3 +34,7 @@ tools/update_reminder.txt
 */logs/*
 
 **sproject**
+
+*.yaml
+*.png
+*.txt
