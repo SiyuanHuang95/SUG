@@ -239,7 +239,7 @@ def main():
             
 
             # Senmantic MMD loss
-            pred_s1, pred_s2, sem_fea_s1, sem_fea_s2 = model(data, semantic_adaption=True)
+            pred_s1, pred_s2, sem_fea_s1, sem_fea_s2 = model(data, semantic_adaption=True, sem_ada_layer=sema_adapt_layer_index)
             if cfg["METHODS"].get("GRL", None):
                 pred_t1, pred_t2, sem_fea_t1, sem_fea_t2 = model(data_t, semantic_adaption=True, constant=cons, adaptation=True, sem_ada_layer=sema_adapt_layer_index)
             else:
