@@ -242,7 +242,7 @@ class Scannet_data_h5(data.Dataset):
 
 
 class UnifiedPointDG(data.Dataset):
-    def __init__(self, dataset_type, pts, labels, status='train', pc_input_num=1024, aug=True, model="Pointnet"):
+    def __init__(self, dataset_type, pts, labels, status='train', pc_input_num=1024, aug=True, model="DGCNN"):
         super(UnifiedPointDG, self).__init__()
 
         self.num_points = pc_input_num

@@ -56,13 +56,14 @@ def main():
     dataset_list = ["scannet", "shapenet", "modelnet"]
     test_datasets = list(set(dataset_list) - {args.source})
     logger.info(f'The datasets used for testing: {test_datasets}')
-
+    model_name=cfg.get("Model", "DGCNN")
+    logger.info(f"Use the backbone: {model_name}")
     # Data loading
     multi_spliter = False
     # when split_config is a dict which means only one split method is used
     split_config = cfg["DATASET_SPLITTER"]
     if type(split_config) is EasyDict:
-        source_train_subsets = create_splitted_dataset(dataset_type=args.source, status="train", logger=logger, config=split_config)
+        source_train_subsets = create_splitted_dataset(dataset_type=args.source, status="train", logger=logger, config=split_config, model=model_name)
         source_train_dataset = source_train_subsets[split_config["TRAIN_BASE"]]
         target_train_dataset1 = source_train_subsets[1-split_config["TRAIN_BASE"]]
     elif type(split_config) is list:
@@ -79,9 +80,9 @@ def main():
         raise RuntimeError(f"Unsupported Splitter Config {type(split_config)}")
     # split 2 is fullsize
 
-    source_test_dataset = create_single_dataset(args.source, status="test", aug=False)
-    target_test_dataset1 = create_single_dataset(test_datasets[0], status="test", aug=False)
-    target_test_dataset2 = create_single_dataset(test_datasets[-1], status="test", aug=False)
+    source_test_dataset = create_single_dataset(args.source, status="test", aug=False, model=model_name)
+    target_test_dataset1 = create_single_dataset(test_datasets[0], status="test", aug=False,  model=model_name)
+    target_test_dataset2 = create_single_dataset(test_datasets[-1], status="test", aug=False,  model=model_name)
 
     if not multi_spliter:
         num_source_train = len(source_train_dataset)
@@ -164,7 +165,7 @@ def main():
         criterion = criterion.to(device=device)
 
     # Optimizer Setting
-    remain_epoch = 50
+    remain_epoch = 0
     max_epoch_num = opt_cfg["NUM_EPOCHES"]
     LR = opt_cfg["LR"]
     weight_decay = opt_cfg["WEIGHT_DECAY"]
@@ -175,7 +176,7 @@ def main():
     optimizer_g = optim.Adam(params, lr=LR, weight_decay=weight_decay)
     lr_schedule_g = optim.lr_scheduler.CosineAnnealingLR(optimizer_g, T_max=max_epoch_num)
 
-    optimizer_c = optim.Adam([{'params': model.c1.parameters()}, {'params': model.c2.parameters()}], lr=LR * 2,
+    optimizer_c = optim.Adam([{'params': model.c1.parameters()}, {'params': model.c2.parameters()}], lr=LR,
                              weight_decay=weight_decay)
     lr_schedule_c = optim.lr_scheduler.CosineAnnealingLR(optimizer_c, T_max=max_epoch_num)
 
@@ -230,12 +231,12 @@ def main():
 
             # Adversarial loss -> let two heads of the model output similiar
             loss_adv = - 1 * discrepancy(pred_t1, pred_t2)
-            loss_s = loss_s1 + loss_s2
+            loss_s = 0.5 * loss_s1 + 0.5 * loss_s2
             if cfg["METHODS"]["TARGET_LOSS"] > 0:
                 loss_t1 = criterion(pred_t1, label)
                 loss_t2 = criterion(pred_t2, label)
-                loss_t = loss_t1 + loss_t2
-                loss = cfg["METHODS"]["SRC_LOSS_WEIGHT"] * loss_s + loss_adv + cfg["METHODS"]["TARGET_LOSS"] * loss_t
+                loss_t = 0.5 * loss_t1 + 0.5 * loss_t2
+                loss = 0.5 * cfg["METHODS"]["SRC_LOSS_WEIGHT"] * loss_s + loss_adv + 0.5 * cfg["METHODS"]["TARGET_LOSS"] * loss_t
             else:
                 loss = cfg["METHODS"]["SRC_LOSS_WEIGHT"] * loss_s + loss_adv
 
