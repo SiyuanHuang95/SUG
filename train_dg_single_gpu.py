@@ -223,6 +223,17 @@ def main():
             idx = epoch % len(source_train_dataloaders)
             source_train_dataloader = source_train_dataloaders[idx]
             target_train_dataloader = target_train_dataloaders[idx]
+
+        geo_mmd_cfg = cfg["METHODS"]["GEO_MMD"][0]
+        sem_mmd_cfg = cfg["METHODS"]["SEM_MMD"][0]
+        geo_CL_criterion = None
+        sem_CL_criterion = None
+        if geo_mmd_cfg["NAME"] == "CL":
+            geo_CL_criterion = nn.CosineEmbeddingLoss(margin=0.2, reduction="none")
+        
+        if sem_mmd_cfg["NAME"] == "CL":
+            sem_CL_criterion = nn.CosineEmbeddingLoss(margin=0.2, reduction="none")
+       
         
         # Training
         for batch_idx, (batch_s, batch_t) in enumerate(zip(source_train_dataloader, target_train_dataloader)):
@@ -255,7 +266,7 @@ def main():
             loss_adv = - cfg["METHODS"]["ADV_WEIGHT"] * discrepancy(pred_t1, pred_t2)
             # TODO Ablation to check wether need add loss_adv
 
-            loss_s = loss_s1 + loss_s2
+            loss_s = 0.5 * loss_s1 + 0.5 * loss_s2
             if cfg["METHODS"]["TARGET_LOSS"] > 0:
                 loss_t1 = criterion(pred_t1, label)
                 loss_t2 = criterion(pred_t2, label)
@@ -283,15 +294,12 @@ def main():
                 # Local Alignment -> self-adaptive node: contains geometry info
                 feat_node_s = model(data, node_adaptation_s=True)  # shape: batch_size * 4096 -> 64 * 64
                 feat_node_t = model(data_t, node_adaptation_t=True)
-                # Add geometric weights
-                geo_mmd_cfg = cfg["METHODS"]["GEO_MMD"][0]
-                loss_geo_mmd =  cfg["METHODS"]["MMD_WEIGHT"] * geo_mmd_cfg["GEO_SCALE"] * mmd.mmd_cal(label, feat_node_s, label_t, feat_node_t, geo_mmd_cfg, data_s=data, data_t=data_t)           
-                
-                sem_mmd_cfg = cfg["METHODS"]["SEM_MMD"][0]
+                loss_geo_mmd = cfg["METHODS"]["MMD_WEIGHT"] * geo_mmd_cfg["GEO_SCALE"] * mmd.mmd_cal(label, feat_node_s, label_t, feat_node_t, geo_mmd_cfg, data_s=data, data_t=data_t, CL_criterion=geo_CL_criterion)           
+
                 loss_sem_mmd = None
                 if  sem_mmd_cfg["SEM_SCALE"] > 0:
-                    loss_sem_mmd_1 = sem_mmd_cfg["SEM_SCALE"] * mmd.mmd_cal(label, sem_fea_s1, label_t, sem_fea_t1, sem_mmd_cfg, data_s=pred_s1, data_t=pred_t1)
-                    loss_sem_mmd_2 = sem_mmd_cfg["SEM_SCALE"] * mmd.mmd_cal(label, sem_fea_s2, label_t, sem_fea_t2, sem_mmd_cfg, data_s=pred_s2, data_t=pred_t2)
+                    loss_sem_mmd_1 = sem_mmd_cfg["SEM_SCALE"] * mmd.mmd_cal(label, sem_fea_s1, label_t, sem_fea_t1, sem_mmd_cfg, data_s=pred_s1, data_t=pred_t1, CL_criterion=sem_CL_criterion)
+                    loss_sem_mmd_2 = sem_mmd_cfg["SEM_SCALE"] * mmd.mmd_cal(label, sem_fea_s2, label_t, sem_fea_t2, sem_mmd_cfg, data_s=pred_s2, data_t=pred_t2, CL_criterion=sem_CL_criterion)
                     loss_sem_mmd = cfg["METHODS"]["MMD_WEIGHT"] * (0.5 * loss_sem_mmd_1 + 0.5 * loss_sem_mmd_2)
 
                 if loss_sem_mmd is not None:

@@ -7,9 +7,9 @@ import pickle
 import random
 import datetime
 
-data_root = "/point_dg/data"
+# data_root = "/point_dg/data"
 # data_root = "/data/point_cloud_classification/PointDA_data"
-data_root = "/mnt/petrelfs/huangsiyuan/data/PointDA_data"
+data_root = "/mnt/lustre/huangsiyuan/data/PointDA_data/PointDA_data"
 # data_root = "/home/siyuan/4-data/PointDA_data"
 num_class = 10
 dataset_list = ["scannet", "shapenet", "modelnet"]
@@ -161,7 +161,8 @@ def include_dataset_one_class(dataset_type, status='train', cls=0):
 
 
 def include_dataset_from_splitter(dataset_type, spliter_config, subset_num=2, method="kmeans", ablation=False):
-    spliter_path = os.path.join(data_root, dataset_type, "spliter")
+    # NOTE: the spliter folder is hard-code here, need to fix
+    spliter_path = os.path.join(data_root, dataset_type, "DGCNN_spliter")
     if not os.path.exists(spliter_path):
         raise RuntimeError("No Spliter Folder Found, Need to Generate Dataset Cluster First!")
 
@@ -227,7 +228,7 @@ def include_dataset_from_splitter(dataset_type, spliter_config, subset_num=2, me
         cluster_num = len(npy_list)
        
         if cluster_num == 4:
-            choice_list = [[0, 1], [2, 3]]
+            choice_list = [[0], [1, 2, 3]]
         elif cluster_num == 2:
             choice_list = [[0], [1]]
         else:
