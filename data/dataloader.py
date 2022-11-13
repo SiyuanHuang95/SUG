@@ -242,7 +242,7 @@ class Scannet_data_h5(data.Dataset):
 
 
 class UnifiedPointDG(data.Dataset):
-    def __init__(self, dataset_type, pts, labels, status='train', pc_input_num=1024, aug=True):
+    def __init__(self, dataset_type, pts, labels, status='train', pc_input_num=1024, aug=True, model="Pointnet"):
         super(UnifiedPointDG, self).__init__()
 
         self.num_points = pc_input_num
@@ -263,6 +263,8 @@ class UnifiedPointDG(data.Dataset):
 
         print(f"Create {status} Dataset {dataset_type} with pts {self.dataset_size}")
         print(f"Cls number {self.cls_num_counter}")
+
+        self.model = model
 
     def classes(self):
         return self.indices
@@ -303,7 +305,7 @@ class UnifiedPointDG(data.Dataset):
         # TODO should do normal once, to speed-up the whole process
         pts = normal_pc(raw_pts)
 
-        if self.dataset_type != "modelnet" :
+        if self.dataset_type != "modelnet" and self.model == "DGCNN":
             rotate_angle = - np.pi / 2
             pts = rotate_shape(pts, "x", rotate_angle)
 
@@ -318,7 +320,9 @@ class UnifiedPointDG(data.Dataset):
                 shape=(self.num_points - pts.shape[0], 3), dtype=float)
             pts = np.concatenate((pts, pad_pc), axis=0)
         elif pts.shape[0] > self.num_points:
-            pts = fps(pts, self.num_points)
+            point_idx = np.arange(0, pts.shape[0])
+            np.random.shuffle(point_idx)
+            pts = pts[point_idx[:self.num_points]]
         pts = np.expand_dims(pts.transpose(), axis=2)
         return torch.from_numpy(pts).type(torch.FloatTensor), label
 

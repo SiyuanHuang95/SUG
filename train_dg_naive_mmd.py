@@ -58,8 +58,27 @@ def main():
     logger.info(f'The source domain is set to: {args.source}')
 
     dataset_list = ["scannet", "shapenet", "modelnet"]
-    # test_datasets = list(set(dataset_list) - {args.source})
-    # logger.info(f'The datasets used for testing: {test_datasets}')
+    test_datasets = list(set(dataset_list) - {args.source})
+    logger.info(f'The datasets used for testing: {test_datasets}')
+
+    # cross-dataset evaluation
+    source_test_dataset = create_single_dataset(args.source, status="test", aug=False)
+    target_test_dataset1 = create_single_dataset(test_datasets[0], status="test", aug=False)
+    target_test_dataset2 = create_single_dataset(test_datasets[-1], status="test", aug=False)
+
+    meta_source_test_dataloader = DataLoader(source_test_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
+                                        drop_last=True)
+    meta_target_test_dataloader1 = DataLoader(target_test_dataset1, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
+                                         drop_last=True)
+    meta_target_test_dataloader2 = DataLoader(target_test_dataset2, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
+                                         drop_last=True)
+    meta_performance_test_sets = {"source": meta_source_test_dataloader, "test1": meta_target_test_dataloader1,
+                             "test2": meta_target_test_dataloader2}
+
+    meta_best_test_acc = {"source": [0, 0], "test1":[0, 0], "test2":[0, 0]}
+    # best_target_acc_epoch + best_target_acc
+    meta_dataset_remapping = {"source":args.source, "test1": test_datasets[0],
+                             "test2": test_datasets[1]}
 
     split_config = cfg["DATASET_SPLITTER"]
     spliter_path = os.path.join(data_root, args.source, "spliter")
@@ -70,6 +89,7 @@ def main():
     source_train_dataset = UnifiedPointDG(dataset_type=args.source, pts=source_train_subsets["subset_1"]["pts"], labels=source_train_subsets["subset_1"]["label"], status="train", aug=True, pc_input_num=1024)
     target_train_dataset1 =UnifiedPointDG(dataset_type=args.source, pts=source_train_subsets["subset_2"]["pts"], labels=source_train_subsets["subset_2"]["label"], status="train", aug=True, pc_input_num=1024)
 
+    # cross-sub domain evaluation, inside single dataset
     # source_test_dataset = create_single_dataset(args.source, status="test", aug=False)
     source_test_subsets = load_dataset_from_split_list(val_list, splited=True)
     target_test_dataset1 = UnifiedPointDG(dataset_type=args.source, pts=source_test_subsets["subset_1"]["pts"], labels=source_test_subsets["subset_1"]["label"], status="test", aug=False, pc_input_num=1024)
@@ -101,13 +121,13 @@ def main():
 
     best_test_acc = {"source": [0, 0], "test1":[0, 0], "test2":[0, 0]}
     # best_target_acc_epoch + best_target_acc
-    # dataset_remapping = {"source":args.source, "test1": test_datasets[0],
-    #                          "test2": test_datasets[1]}
+    dataset_remapping = {"source":args.source, "test1": "sub_1",
+                             "test2": "sub_2"}
     # pool_eval = Pool(processes=len(dataset_list))
     # AssertionError: daemonic processes are not allowed to have children
 
     # Model
-    model = mM.Net_MDA(model_name=cfg.get("Model", "DGCNN"))
+    model = mM.Net_MDA(model_name=cfg.get("Model", "Pointnet"))
     logger.info(model)
     model = model.to(device=device)
 
@@ -136,7 +156,7 @@ def main():
     optimizer_g = optim.Adam(params, lr=LR, weight_decay=weight_decay)
     lr_schedule_g = optim.lr_scheduler.CosineAnnealingLR(optimizer_g, T_max=max_epoch_num)
 
-    optimizer_c = optim.Adam([{'params': model.c1.parameters()}, {'params': model.c2.parameters()}], lr=LR * 2,
+    optimizer_c = optim.Adam([{'params': model.c1.parameters()}, {'params': model.c2.parameters()}], lr=LR,
                              weight_decay=weight_decay)
     lr_schedule_c = optim.lr_scheduler.CosineAnnealingLR(optimizer_c, T_max=max_epoch_num)
 
@@ -190,15 +210,14 @@ def main():
             loss_s2 = criterion(pred_s2, label)
 
             # Adversarial loss -> let two heads of the model output similiar
-            loss_adv = - 1 * discrepancy(pred_t1, pred_t2)
-            loss_s = loss_s1 + loss_s2
-            if cfg["METHODS"]["TARGET_LOSS"] > 0:
-                loss_t1 = criterion(pred_t1, label)
-                loss_t2 = criterion(pred_t2, label)
-                loss_t = loss_t1 + loss_t2
-                loss = cfg["METHODS"]["SRC_LOSS_WEIGHT"] * loss_s + loss_adv + cfg["METHODS"]["TARGET_LOSS"] * loss_t
-            else:
-                loss = cfg["METHODS"]["SRC_LOSS_WEIGHT"] * loss_s + loss_adv
+            loss_adv = - 0.5 * discrepancy(pred_t1, pred_t2)
+            loss_s = 0.5 * loss_s1 + 0.5 * loss_s2
+            
+            loss_t1 = criterion(pred_t1, label)
+            loss_t2 = criterion(pred_t2, label)
+            loss_t = loss_t1 + loss_t2
+            loss = 0.5 * loss_s + loss_adv + 0.5 * loss_t
+  
 
             loss.backward()
             optimizer_g.step()
@@ -210,7 +229,7 @@ def main():
             feat_node_s = model(data, node_adaptation_s=True)  # shape: batch_size * 4096
             feat_node_t = model(data_t, node_adaptation_t=True)
 
-            loss_node_adv = 1 * mmd.mmd_cal(label, feat_node_s, label_t, feat_node_t, cfg["METHODS"]["CLASS_MMD"][0])           
+            loss_node_adv = 0.5 * mmd.mmd_cal(label, feat_node_s, label_t, feat_node_t, cfg["METHODS"]["CLASS_MMD"][0])           
             loss = loss_node_adv
             loss.backward()
             optimizer_dis.step()
@@ -239,14 +258,17 @@ def main():
                     "criterion": criterion,
                     "epoch": epoch,
                     "best_target_acc_epoch": best_test_acc[eval_dataset][0],
-                    "dataset_name": "source_",
+                    "dataset_name": dataset_remapping[eval_dataset],
                     "num_class": cfg["DATASET"]["NUM_CLASS"]
                 }
+                # TODO eval时候，best acc好像没有成功更新
                 eval_result = eval_worker(eval_dict, logger)
                 best_test_acc[eval_dataset][1] = eval_result["best_target_acc"]
                 best_test_acc[eval_dataset][0] = eval_result["best_target_acc_epoch"]
                 writer_item = 'acc/' + eval_result["dataset"] + "_test_acc"
                 writer.add_scalar(writer_item, eval_result["best_target_acc"], epoch)
+
+        
 
         trained_epoch = epoch + 1
         if trained_epoch % args.ckpt_save_interval == 0:
@@ -259,6 +281,28 @@ def main():
             ckpt_name = os.path.join(ckpt_dir, args.source + ('_checkpoint_epoch_%d' % trained_epoch))
             logger.info(f"Save current ckpt to {ckpt_name}")
             save_checkpoint(checkpoint_state(model, epoch=trained_epoch), filename=ckpt_name)
+
+        if trained_epoch % 10 == 0:
+             with torch.no_grad():
+                model.eval()
+                for eval_dataset in meta_performance_test_sets.keys():
+                    eval_dict = {
+                        "model": copy.deepcopy(model),
+                        "dataloader": meta_performance_test_sets[eval_dataset],
+                        "dataset": eval_dataset,
+                        "best_target_acc": meta_best_test_acc[eval_dataset][1],
+                        "device": device,
+                        "criterion": criterion,
+                        "epoch": epoch,
+                        "best_target_acc_epoch": meta_best_test_acc[eval_dataset][0],
+                        "dataset_name": meta_dataset_remapping[eval_dataset],
+                        "num_class": cfg["DATASET"]["NUM_CLASS"]
+                    }
+                    eval_result = eval_worker(eval_dict, logger)
+                    meta_best_test_acc[eval_dataset][1] = eval_result["best_target_acc"]
+                    meta_best_test_acc[eval_dataset][0] = eval_result["best_target_acc_epoch"]
+                    writer_item = 'acc/' + eval_result["dataset"] + "_test_acc"
+                    writer.add_scalar(writer_item, eval_result["best_target_acc"], epoch)
 
         time_pass_e = time.time() - since_e
         logger.info('The {} epoch takes {:.0f}m {:.0f}s'.format(epoch, time_pass_e // 60, time_pass_e % 60))

@@ -17,6 +17,9 @@ from utils.train_utils import save_checkpoint, checkpoint_state, adjust_learning
 from utils.common_utils import create_logger, exp_log_folder_creator
 from utils.config import parser_config, log_config_to_file
 from utils.train_files_spliter import dataset_list
+from utils.train_files_spliter import load_dataset_from_split_list, data_root
+from data.dataloader import create_splitted_dataset, create_single_dataset, UnifiedPointDG
+
 
 def main():
     args, cfg = parser_config()
@@ -42,35 +45,42 @@ def main():
     logger.info('Start Training\nInitiliazing\n')
     logger.info(f'The source domain is set to: {args.source}')
 
-    test_datasets = list(set(dataset_list) - {args.source})
-    logger.info(f'The datasets used for testing: {test_datasets}')
+    # test_datasets = list(set(dataset_list) - {args.source})
+    # logger.info(f'The datasets used for testing: {test_datasets}')
 
-    source_train_dataset = create_single_dataset(dataset_type=args.source,status="train", aug=True)
-    source_test_dataset = create_single_dataset(dataset_type=args.source,status="test", aug=False)
-    target_test_dataset1 = create_single_dataset(dataset_type=test_datasets[0], status="test", aug=False)
-    target_test_dataset2 = create_single_dataset(test_datasets[-1], status="test", aug=False)
+    spliter_path = os.path.join(data_root, args.source, "spliter")
+    train_list = os.path.join(spliter_path, "rebu_train.txt")
+    val_list = os.path.join(spliter_path, "rebu_val.txt")
+    source_train_dataset_info = load_dataset_from_split_list(train_list, splited=False)
+    source_train_dataset = UnifiedPointDG(dataset_type=args.source, pts=source_train_dataset_info[0], labels=source_train_dataset_info[1], status="train", aug=True, pc_input_num=1024, model=cfg.get("Model", "Pointnet"))
+
+    source_test_subsets = load_dataset_from_split_list(val_list, splited=True)
+    target_test_dataset1 = UnifiedPointDG(dataset_type=args.source, pts=source_test_subsets["subset_1"]["pts"], labels=source_test_subsets["subset_1"]["label"], status="test", aug=False, pc_input_num=1024)
+    target_test_dataset2 = UnifiedPointDG(dataset_type=args.source, pts=source_test_subsets["subset_2"]["pts"], labels=source_test_subsets["subset_2"]["label"], status="test", aug=False, pc_input_num=1024)
+
+    # source_test_dataset = create_single_dataset(dataset_type=args.source,status="test", aug=False)
+    # target_test_dataset1 = create_single_dataset(dataset_type=test_datasets[0], status="test", aug=False)
+    # target_test_dataset2 = create_single_dataset(test_datasets[-1], status="test", aug=False)
 
     num_source_train = len(source_train_dataset)
-    num_source_test = len(source_test_dataset)
     num_target_test1 = len(target_test_dataset1)
     num_target_test2 = len(target_test_dataset2)
 
     source_train_dataloader = DataLoader(source_train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2, drop_last=False)
-    source_test_dataloader = DataLoader(source_test_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2, drop_last=False)
     target_test_dataloader1 = DataLoader(target_test_dataset1, batch_size=BATCH_SIZE, shuffle=True, num_workers=2, drop_last=False)
     target_test_dataloader2 = DataLoader(target_test_dataset2, batch_size=BATCH_SIZE, shuffle=True, num_workers=2, drop_last=False)
-    performance_test_sets = {"source": source_test_dataloader, "test1": target_test_dataloader1,
+    performance_test_sets = {"test1": target_test_dataloader1,
                              "test2": target_test_dataloader2}
 
-    logger.info('num_source_train: {:d}, num_source_test: {:d}, num_target_test1: {:d}, num_target_test2: {:d}'.format(
-        num_source_train, num_source_test, num_target_test1, num_target_test2))
+    logger.info('num_source_train: {:d}, num_target_test1: {:d}, num_target_test2: {:d}'.format(
+        num_source_train, num_target_test1, num_target_test2))
     logger.info(f'batch_size: {BATCH_SIZE}')
 
     num_cls = cfg["DATASET"]["NUM_CLASS"]
     # Model
-    if cfg.get("Model", "PointNet") == "PointNet2":
+    if cfg.get("Model", "Pointnet") == "PointNet2":
         model = Pointnet2_cls(num_class=num_cls)
-    elif cfg.get("Model", "PointNet") == "DGCNN":
+    elif cfg.get("Model", "Pointnet") == "DGCNN":
         model = DGCNN()
     else:
         model = Pointnet_cls(num_class=num_cls)
@@ -89,8 +99,8 @@ def main():
     # lr_schedule = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.7)
 
     best_test_acc = {"source": [0, 0], "test1":[0, 0], "test2":[0, 0]}
-    dataset_remapping = {"source":args.source, "test1": test_datasets[0],
-                             "test2": test_datasets[1]}
+    dataset_remapping = {"source":args.source, "test1": "sub_1",
+                             "test2": "sub_1"}
     # best_target_acc_epoch + best_target_acc
 
     for epoch in range(max_epoch_num):
