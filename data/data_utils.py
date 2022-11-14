@@ -20,6 +20,8 @@ def rotation_point_cloud(pc):
     rotation is per shape based along up direction
     :param pc: B X N X 3 array, original batch of point clouds
     :return: BxNx3 array, rotated batch of point clouds
+    # NOTE should rotate along z-axis when use for aligned dataset!
+    # But rotatee along x when not aligned datase.
     """
     # rotated_data = np.zeros(pc.shape, dtype=np.float32)
 

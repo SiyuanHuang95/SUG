@@ -1,23 +1,12 @@
 # Domain Generalization for 3D Point Cloud 
 
-## TODO List
-[ ] 3D Geometric-aware MMD alignment
+This Branch contains the implementation for the PointNet-related rebuttal experiments:
 
-    [X] Use 3D descriptor to split the dataset, like ICP
-    [ ] Register the point cloud before MMD
-    [ ] Concat the feature from naive FE and the feature after register
+- The layer selection experiments.
 
-[ ] Dimain Aligment
+- The lamda weighting experiments.
 
-    [ ] MMD
-    [ ] Domain discriminator
-
-[ ] Dual Alignment
-
-    [ ] Entropy -> Cluster
-    [ ] Cluster -> Entropy
-
-[ ] Meta-Learning Framework
+- Comparison with Contrastive Loss and MMD.
 
 ## Requirements
 

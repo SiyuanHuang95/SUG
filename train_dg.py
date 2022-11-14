@@ -196,7 +196,19 @@ def main():
                                 {'params': model.attention_t.parameters()}],
                                lr=LR * scaler, weight_decay=weight_decay)
     lr_schedule_dis = optim.lr_scheduler.CosineAnnealingLR(optimizer_dis, T_max=max_epoch_num + remain_epoch)
-
+    
+    # init the contrastive learning loss criterion
+    geo_mmd_cfg = cfg["METHODS"]["GEO_MMD"][0]
+    sem_mmd_cfg = cfg["METHODS"]["SEM_MMD"][0]
+    geo_CL_criterion = None
+    sem_CL_criterion = None
+    if geo_mmd_cfg["NAME"] == "CL":
+        geo_CL_criterion = nn.CosineEmbeddingLoss(margin=0.2, reduction="none")
+        logger.info("Init the CL for GEO")
+            
+    if sem_mmd_cfg["NAME"] == "CL":
+        sem_CL_criterion = nn.CosineEmbeddingLoss(margin=0.2, reduction="none")
+        logger.info("Init the CL for SEM")
 
     for epoch in range(max_epoch_num):
         since_e = time.time()
@@ -285,13 +297,13 @@ def main():
                 feat_node_t = model(data_t, node_adaptation_t=True)
                 # Add geometric weights
                 geo_mmd_cfg = cfg["METHODS"]["GEO_MMD"][0]
-                loss_geo_mmd =  cfg["METHODS"]["MMD_WEIGHT"] * geo_mmd_cfg["GEO_SCALE"] * mmd.mmd_cal(label, feat_node_s, label_t, feat_node_t, geo_mmd_cfg, data_s=data, data_t=data_t)           
+                loss_geo_mmd = cfg["METHODS"]["MMD_WEIGHT"] * geo_mmd_cfg["GEO_SCALE"] * mmd.mmd_cal(label, feat_node_s, label_t, feat_node_t, geo_mmd_cfg, data_s=data, data_t=data_t, CL_criterion=geo_CL_criterion)           
                 
                 sem_mmd_cfg = cfg["METHODS"]["SEM_MMD"][0]
                 loss_sem_mmd = None
                 if  sem_mmd_cfg["SEM_SCALE"] > 0:
-                    loss_sem_mmd_1 = sem_mmd_cfg["SEM_SCALE"] * mmd.mmd_cal(label, sem_fea_s1, label_t, sem_fea_t1, sem_mmd_cfg, data_s=pred_s1, data_t=pred_t1)
-                    loss_sem_mmd_2 = sem_mmd_cfg["SEM_SCALE"] * mmd.mmd_cal(label, sem_fea_s2, label_t, sem_fea_t2, sem_mmd_cfg, data_s=pred_s2, data_t=pred_t2)
+                    loss_sem_mmd_1 = sem_mmd_cfg["SEM_SCALE"] * mmd.mmd_cal(label, sem_fea_s1, label_t, sem_fea_t1, sem_mmd_cfg, data_s=pred_s1, data_t=pred_t1, CL_criterion=sem_CL_criterion)
+                    loss_sem_mmd_2 = sem_mmd_cfg["SEM_SCALE"] * mmd.mmd_cal(label, sem_fea_s2, label_t, sem_fea_t2, sem_mmd_cfg, data_s=pred_s2, data_t=pred_t2, CL_criterion=sem_CL_criterion)
                     loss_sem_mmd = cfg["METHODS"]["MMD_WEIGHT"] * (0.5 * loss_sem_mmd_1 + 0.5 * loss_sem_mmd_2)
 
                 if loss_sem_mmd is not None:
