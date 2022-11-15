@@ -4,6 +4,9 @@ from model.pointnet2_utils import PointNetSetAbstraction
 from model.pointnet2.pointnet2_modules import PointnetFPModule, PointnetSAModuleMSG
 
 import model.pointnet2.pytorch_utils as pt_utils
+from model.Ptran_transformer import TransformerBlock
+import model.PTran_utils as PTran_utils
+
 
 import torch
 import torch.nn as nn
@@ -280,9 +283,134 @@ class Pointnet_g(nn.Module):
             return x, node_fea
 
 
+class TransitionDown(nn.Module):
+    def __init__(self, k, nneighbor, channels):
+        super().__init__()
+        self.sa = PTran_utils.PointNetSetAbstraction(k, 0, nneighbor, channels[0], channels[1:], group_all=False, knn=True)
+        
+    def forward(self, xyz, points):
+        return self.sa(xyz, points)
+
+
+class PTran_g(nn.Module):
+    def __init__(self):
+        super(PTran_g, self).__init__()
+        npoints, nblocks, nneighbor, n_c, d_points = 1024, 4, 16, 10, 3
+        transformer_dim = 512  
+        self.fc1 = nn.Sequential(
+            nn.Linear(d_points, 32),
+            nn.ReLU(),
+            nn.Linear(32, 32)
+        )
+
+        self.transformer1 = TransformerBlock(32, transformer_dim, nneighbor)
+        self.transition_downs = nn.ModuleList()
+        self.transformers = nn.ModuleList()
+        for i in range(nblocks):
+            channel = 32 * 2 ** (i + 1)
+            self.transition_downs.append(TransitionDown(npoints // 4 ** (i + 1), nneighbor, [channel // 2 + 3, channel, channel]))
+            self.transformers.append(TransformerBlock(channel, transformer_dim, nneighbor))
+        self.nblocks = nblocks
+        self.conv1d = nn.Conv1d(64, 64, 1, stride=2)
+    
+    def forward(self, x, node=False):
+        # x : batch_size * 3 * 1024 * 1
+        x_ = x.squeeze(-1)
+        x_ = x_.permute(0, 2, 1) # bs * 1024 * 3
+        xyz = x_[..., :3]
+        x1 = self.fc1(x_) # x1:bs * 1024 * 32
+        points = self.transformer1(xyz, x1)[0] # bs * 1024 * 32
+
+        xyz_and_feats = [(xyz, points)]
+        for i in range(self.nblocks):
+            xyz, points = self.transition_downs[i](xyz, points)
+            points = self.transformers[i](xyz, points)[0]
+            xyz_and_feats.append((xyz, points))
+
+        node_features_128 = xyz_and_feats[2][1]  # 32 * 64 * 128 
+        node_features = self.conv1d(node_features_128)
+        points = points.mean(1)
+
+        if node:
+            return points, node_features, None
+        else:
+            return points, node_features
+        
+        # points: bs * 4 * 512
+        # xyz_fea: [
+        # 0: bs * 1024 * 3     bs * 1024 * 32
+        # 1: bs * 256 * 3      bs * 256 * 64
+        # 2: bs * 64 * 3       bs * 64 * 128
+        # 3: bs * 16 * 3       bs * 16 * 256
+        # 4: bs * 4 * 3        bs * 4 * 512
+        # ]
+        # pass
+
+class KPConv_g(nn.Module):
+    def __init__(self, config=None):
+        super(KPConv_g, self).__init__()
+        from model.KPConv_model import KPFEncoder, PreprocessorGPU, GlobalAverageBlock
+        from model.KPConv_blocks import sample_tensor_slices 
+        from model.KPConv_model import KPConvConfig
+        if config is None:
+            self.config = KPConvConfig
+        else:
+            self.config = config
+        
+        self.sample_tensor_slices = sample_tensor_slices
+        self.preprocessor = PreprocessorGPU(self.config)
+        self.encoder = KPFEncoder(self.config)
+        self.global_avg_pooling = GlobalAverageBlock()
+
+        self.deform_fitting_power = self.config.deform_fitting_power
+
+    def forward(self, x, node=False):
+        x_ = x.squeeze(-1)
+        x_ = x_.permute(0, 2, 1)
+        x_list = []
+        if x.shape[0] > 1:
+            for i in range(x.shape[0]):
+                x_list.append(x_[i, :])
+        kpconv_meta = self.preprocessor(x_list)
+        feats0 = kpconv_meta["points"][0][:, 0:1]
+        feats = self.encoder(feats0, kpconv_meta)
+        
+        stack_length = kpconv_meta["stack_lengths"][1]
+        nodes = self.sample_tensor_slices(feats[2], stack_length)
+
+        feats = self.global_avg_pooling(feats[0], kpconv_meta["stack_lengths"][-1])
+        # feats = feats.view(B, 1024, -1)
+        if node:
+            return feats, nodes, None
+        else:
+            return feats, nodes    
+
+    
+class KPConv_c(nn.Module):
+    def __init__(self, num_class=10, dgcnn_flag=False, PTran_flag=False):
+        super(KPConv_c, self).__init__()
+
+        self.mlp1 = nn.Linear(1024, 256)
+        self.mlp2 = nn.Linear(256, 64)
+        self.mlp3 = nn.Linear(64, num_class)
+        self.act = nn.ReLU()
+ 
+    def forward(self, x, adapt=False):
+        x = self.mlp1(x)
+        if adapt == True:
+            mid_feature = x 
+        x = self.act(x)
+        x = self.mlp2(x)
+        x = self.act(x)
+        x = self.mlp3(x)  # batchsize*10
+        if adapt == False:
+            return x
+        else:
+            return x, mid_feature
+
 # Classifier
 class Pointnet_c(nn.Module):
-    def __init__(self, num_class=10, dgcnn_flag=False):
+    def __init__(self, num_class=10, dgcnn_flag=False, PTran_flag=False):
         super(Pointnet_c, self).__init__()
         # classifier in PointDAN
         # self.fc = nn.Linear(1024, num_class)
@@ -303,9 +431,12 @@ class Pointnet_c(nn.Module):
         self.dropout2 = nn.Dropout2d(p=0.4)
         self.mlp3 = nn.Linear(256, num_class)
 
+        self.PTran = PTran_flag
+
     def forward(self, x, adapt=False):
-        x = self.mlp1(x)  # batchsize*512
-        x = self.dropout1(x)
+        if not self.PTran:
+            x = self.mlp1(x)  # batchsize*512
+            x = self.dropout1(x)
         x = self.mlp2(x)  # batchsize*256
         if adapt == True:
             mid_feature = x 
@@ -322,6 +453,7 @@ class Net_MDA(nn.Module):
     def __init__(self, model_name='Pointnet'):
         super(Net_MDA, self).__init__()
         self.dgcnn_flag = False
+        self.PTran_flag = False
         if model_name == 'Pointnet':
             self.g = Pointnet_g()
         elif model_name == "Pointnet2":
@@ -329,13 +461,26 @@ class Net_MDA(nn.Module):
         elif model_name == "DGCNN":
             self.g = DGCNN()
             self.dgcnn_flag = True
+        elif model_name == "PTran":
+            self.g = PTran_g()
+            self.PTran_flag = True
+        elif model_name == "KPConv":
+            
+            from model.KPConv_model import KPConvConfig
+            self.g = KPConv_g(config=KPConvConfig)
         else:
             raise NotImplementedError("Unsupported model name")
 
         self.attention_s = CALayer(64 * 64)
         self.attention_t = CALayer(64 * 64)
-        self.c1 = Pointnet_c(dgcnn_flag=self.dgcnn_flag)
-        self.c2 = Pointnet_c(dgcnn_flag=self.dgcnn_flag)
+
+        if model_name != "KPConv":
+            self.c1 = Pointnet_c(dgcnn_flag=self.dgcnn_flag, PTran_flag=self.PTran_flag)
+            self.c2 = Pointnet_c(dgcnn_flag=self.dgcnn_flag, PTran_flag=self.PTran_flag)
+
+        else:
+            self.c1 = KPConv_c()
+            self.c2 = KPConv_c()
 
     def forward(self, x, constant=1, adaptation=False, node_vis=False, mid_feat=False, node_adaptation_s=False,
                 node_adaptation_t=False, semantic_adaption=False):

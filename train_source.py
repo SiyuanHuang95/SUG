@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from model.model_pointnet import Pointnet_cls, Pointnet2_cls, DGCNN
+from model.Ptran_model import PointTransformerCls
+from model.KPConv_model import KPFCls, p2p_fitting_regularizer
 from data.dataloader import Modelnet40_data, Shapenet_data, Scannet_data_h5
 from data.dataloader import create_single_dataset
 
@@ -73,9 +75,14 @@ def main():
         model = Pointnet2_cls(num_class=num_cls)
     elif cfg.get("Model", "PointNet") == "DGCNN":
         model = DGCNN()
+    elif cfg.get("Model", "PointNet") == "PTran":
+        model = PointTransformerCls()
+    elif cfg.get("Model", "PointNet") == "KPConv":
+        model = KPFCls()
     else:
         model = Pointnet_cls(num_class=num_cls)
     model = model.to(device=device)
+    logger.info(model)
     criterion = nn.CrossEntropyLoss()
     criterion = criterion.to(device=device)
 
@@ -111,6 +118,11 @@ def main():
 
             output_s = model(data)
             loss_s = criterion(output_s, label)
+
+            if cfg.get("Model", "PointNet") == "KPConv":
+                reg_loss = p2p_fitting_regularizer(model.encoder.encoder_blocks, deform_fitting_power=model.deform_fitting_power)
+                loss_s += reg_loss
+                
             loss_s.backward()
             optimizer.step()
             optimizer.zero_grad()

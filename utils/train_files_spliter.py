@@ -9,8 +9,10 @@ import datetime
 
 # data_root = "/point_dg/data"
 # data_root = "/data/point_cloud_classification/PointDA_data"
-data_root = "/mnt/lustre/huangsiyuan/data/PointDA_data/PointDA_data"
+
+
 # data_root = "/home/siyuan/4-data/PointDA_data"
+data_root = "/hdd1/huangsiyuan/PointDA_data"
 num_class = 10
 dataset_list = ["scannet", "shapenet", "modelnet"]
 

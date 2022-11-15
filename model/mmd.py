@@ -22,16 +22,13 @@ import torch.nn as nn
 min_var_est = 1e-8
 sigma_list = [0.01, 0.1, 1, 10, 100]
 
-def mmd_cal(label_s, feat_s, label_t, feat_t, args:dict, data_s=None, data_t=None, CL_criterion=None):
+def mmd_cal(label_s, feat_s, label_t, feat_t, args:dict, data_s=None, data_t=None, KPC=False):
     # Currently, lets use SOFT_MMD 
     sample_weights = None
     sample_weights_flag = args.get("GEO_WEIGHTS", None) or args.get("SEM_WEIGHTS", None)
     if data_s is not None and sample_weights_flag:
+        sample_weights = cal_sample_weights(data_s, data_t, args, label_s=label_s, label_t=label_t, KPC=KPC)
         sample_weights = cal_sample_weights(data_s, data_t, args, label_s=label_s, label_t=label_t)
-    
-    if CL_criterion:
-        return contrastive_loss_weighted(label_s, feat_s, label_t, feat_t, float(args["LABEL_SCALE"]), CL_criterion, sample_weights=sample_weights)
-
     if args["NAME"] == "SOFT_MMD":
         return soft_mmd(label_s, feat_s, label_t, feat_t, float(args["LABEL_SCALE"]), sample_weights=sample_weights)
     elif args["NAME"] == "HARD_MMD":
@@ -44,9 +41,9 @@ def mmd_cal(label_s, feat_s, label_t, feat_t, args:dict, data_s=None, data_t=Non
         raise RuntimeError("Not Supported MMD Method")
 
 
-def cal_sample_weights(data_s, data_t, args, label_s=None, label_t=None):
+def cal_sample_weights(data_s, data_t, args, label_s=None, label_t=None, KPC=False):
     if args.get("GEO_WEIGHTS", None):
-        sample_weights = geometric_weights(data_s, data_t, weighting=args["GEO_WEIGHTS"])
+        sample_weights = geometric_weights(data_s, data_t, weighting=args["GEO_WEIGHTS"],KPC=KPC)
     elif args.get("ENTROPY_WEIGHTS", None):
         sample_weights = entropy_weights(data_s, data_t, weighting=args["ENTROPY_WEIGHTS"])
     elif args.get("SEM_WEIGHTS", None):
@@ -107,24 +104,29 @@ def max_hard_mmd(label_s, feat_s, label_t, feat_t):
     return mix_rbf_mmd2(selected_feat_node_s, selected_feat_node_t, sigma_list)
 
 
-def geometric_weights(pc_s, pc_t, metric="chamfer_distance", weighting="none"):
+def geometric_weights(pc_s, pc_t, metric="chamfer_distance", weighting="none", KPC=False):
     assert pc_s.shape[0] == pc_t.shape[0]
     criteria = None
-    if metric == "chamfer_distance":
-        cd = ChamferDistance()
-        criteria = partial(cd_distance, chamfer_dist=cd)
-        # to use the CD, the pc should be batch_size * num_points *3
-        # return torch.tensor(batch_size)
-
+    if metric != "chamfer_distance":
+        raise RuntimeError("Currently Only Support CD distance") 
     if pc_s.shape[1] == 3:
-        # batch * 3 * num_points -> batch * num_points * 3
+        # currently, only support CD
+    # batch * 3 * num_points -> batch * num_points * 3
         pc_1 = pc_s.transpose(1,2).squeeze()
         pc_2 = pc_t.transpose(1,2).squeeze()
     else:
         pc_1 = pc_s
         pc_2 = pc_t
+    # to use the CD, the pc should be batch_size * num_points *3
+    # return torch.tensor(batch_size)
+    if  KPC:
+        dist1, dist2, idx1, idx2 = ChamferDistance(pc_1, pc_2)
+        distance = torch.mean(dist1, dim=1) +  torch.mean(dist2, dim=1)
+    else:
+        cd = ChamferDistance()
+        criteria = partial(cd_distance, chamfer_dist=cd)
+        distance = criteria(pc_1, pc_2)
 
-    distance = criteria(pc_1, pc_2)
     weights = distance2weights(distances=distance, method=weighting)
     return weights.reshape(1, -1)
 

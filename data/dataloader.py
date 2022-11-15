@@ -320,10 +320,6 @@ class UnifiedPointDG(data.Dataset):
                 shape=(self.num_points - pts.shape[0], 3), dtype=float)
             pts = np.concatenate((pts, pad_pc), axis=0)
         elif pts.shape[0] > self.num_points:
-            # fps 
-            # pts = fps(pts, self.num_points)
-
-            # random sample
             point_idx = np.arange(0, pts.shape[0])
             np.random.shuffle(point_idx)
             pts = pts[point_idx[:self.num_points]]

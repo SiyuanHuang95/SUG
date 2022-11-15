@@ -24,6 +24,8 @@ from utils.common_utils import create_logger, exp_log_folder_creator, set_random
 from utils.config import parser_config, log_config_to_file
 from data.dataloader import create_splitted_dataset, create_single_dataset
 
+from model.KPConv_model import KPFCls, p2p_fitting_regularizer
+
 
 from tensorboardX import SummaryWriter
 
@@ -31,6 +33,9 @@ warnings.filterwarnings("ignore")
 
 def main():
     args, cfg = parser_config()
+
+    if args.fix_random_seed:
+        set_random_seed(666 + cfg.LOCAL_RANK)
 
     device = 'cuda'
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
@@ -151,6 +156,7 @@ def main():
     model = mM.Net_MDA(model_name=cfg.get("Model", "Pointnet"))
     logger.info(model)
     model = model.to(device=device)
+    KPC_Flag = cfg["Model"] == "KPConv"
 
     opt_cfg = cfg["OPTIMIZATION"]
 
@@ -172,9 +178,10 @@ def main():
     else:
         criterion = nn.CrossEntropyLoss()
         criterion = criterion.to(device=device)
+        logger.info("Use the plain CrossEntropy")
 
     # Optimizer Setting
-    remain_epoch = 50
+    remain_epoch = 0
     max_epoch_num = opt_cfg["NUM_EPOCHES"]
     LR = opt_cfg["LR"]
     weight_decay = opt_cfg["WEIGHT_DECAY"]
@@ -186,7 +193,7 @@ def main():
     optimizer_g = optim.Adam(params, lr=LR, weight_decay=weight_decay)
     lr_schedule_g = optim.lr_scheduler.CosineAnnealingLR(optimizer_g, T_max=max_epoch_num)
 
-    optimizer_c = optim.Adam([{'params': model.c1.parameters()}, {'params': model.c2.parameters()}], lr=LR * 2,
+    optimizer_c = optim.Adam([{'params': model.c1.parameters()}, {'params': model.c2.parameters()}], lr=LR,
                              weight_decay=weight_decay)
     lr_schedule_c = optim.lr_scheduler.CosineAnnealingLR(optimizer_c, T_max=max_epoch_num)
 
@@ -262,18 +269,25 @@ def main():
             loss_s1 = criterion(pred_s1, label)
             loss_s2 = criterion(pred_s2, label)
 
+            loss_adv = None
             # Adversarial loss -> let two heads of the model output similar
-            loss_adv = - cfg["METHODS"]["ADV_WEIGHT"] * discrepancy(pred_t1, pred_t2)
+            if cfg["METHODS"]["ADV_WEIGHT"] > 0:
+                loss_adv = - cfg["METHODS"]["ADV_WEIGHT"] * discrepancy(pred_t1, pred_t2)
+                loss_s = loss_s + loss_adv
             # TODO Ablation to check wether need add loss_adv
 
             loss_s = 0.5 * loss_s1 + 0.5 * loss_s2
+            if KPC_Flag:
+                reg_loss = p2p_fitting_regularizer(model.g.encoder.encoder_blocks, deform_fitting_power=model.g.deform_fitting_power)
+                loss_s += reg_loss
+
             if cfg["METHODS"]["TARGET_LOSS"] > 0:
                 loss_t1 = criterion(pred_t1, label)
                 loss_t2 = criterion(pred_t2, label)
-                loss_t = loss_t1 + loss_t2
-                loss = cfg["METHODS"]["SRC_LOSS_WEIGHT"] * loss_s + loss_adv + cfg["METHODS"]["TARGET_LOSS"] * loss_t
+                loss_t = 0.5 * loss_t1 + 0.5 * loss_t2
+                loss = 0.5 * loss_s + 0.5 * loss_t
             else:
-                loss = cfg["METHODS"]["SRC_LOSS_WEIGHT"] * loss_s + loss_adv
+                loss = cfg["METHODS"]["SRC_LOSS_WEIGHT"] * loss_s
 
             loss_cls = cfg["METHODS"]["CLS_WEIGHT"] * loss
             if epoch < pure_cls_epoch or cfg["METHODS"]["MMD_WEIGHT"] <= 0:
@@ -294,12 +308,17 @@ def main():
                 # Local Alignment -> self-adaptive node: contains geometry info
                 feat_node_s = model(data, node_adaptation_s=True)  # shape: batch_size * 4096 -> 64 * 64
                 feat_node_t = model(data_t, node_adaptation_t=True)
-                loss_geo_mmd = cfg["METHODS"]["MMD_WEIGHT"] * geo_mmd_cfg["GEO_SCALE"] * mmd.mmd_cal(label, feat_node_s, label_t, feat_node_t, geo_mmd_cfg, data_s=data, data_t=data_t, CL_criterion=geo_CL_criterion)           
 
+                # Add geometric weights
+                geo_mmd_cfg = cfg["METHODS"]["GEO_MMD"][0]
+                loss_geo_mmd =  cfg["METHODS"]["MMD_WEIGHT"] * geo_mmd_cfg["GEO_SCALE"] * mmd.mmd_cal(label, feat_node_s, label_t, feat_node_t, geo_mmd_cfg, data_s=data, data_t=data_t, KPC=KPC_Flag)           
+                
+                sem_mmd_cfg = cfg["METHODS"]["SEM_MMD"][0]
                 loss_sem_mmd = None
                 if  sem_mmd_cfg["SEM_SCALE"] > 0:
-                    loss_sem_mmd_1 = sem_mmd_cfg["SEM_SCALE"] * mmd.mmd_cal(label, sem_fea_s1, label_t, sem_fea_t1, sem_mmd_cfg, data_s=pred_s1, data_t=pred_t1, CL_criterion=sem_CL_criterion)
-                    loss_sem_mmd_2 = sem_mmd_cfg["SEM_SCALE"] * mmd.mmd_cal(label, sem_fea_s2, label_t, sem_fea_t2, sem_mmd_cfg, data_s=pred_s2, data_t=pred_t2, CL_criterion=sem_CL_criterion)
+                    loss_sem_mmd_1 = sem_mmd_cfg["SEM_SCALE"] * mmd.mmd_cal(label, sem_fea_s1, label_t, sem_fea_t1, sem_mmd_cfg, data_s=pred_s1, data_t=pred_t1, KPC=KPC_Flag)
+                    loss_sem_mmd_2 = sem_mmd_cfg["SEM_SCALE"] * mmd.mmd_cal(label, sem_fea_s2, label_t, sem_fea_t2, sem_mmd_cfg, data_s=pred_s2, data_t=pred_t2, KPC=KPC_Flag)
+
                     loss_sem_mmd = cfg["METHODS"]["MMD_WEIGHT"] * (0.5 * loss_sem_mmd_1 + 0.5 * loss_sem_mmd_2)
 
                 if loss_sem_mmd is not None:
@@ -324,12 +343,18 @@ def main():
             data_t_total += data_t.size(0)
 
             loss_cls_total += loss_cls.item() * data.size(0)
-            loss_adv_total += loss_adv.item() * data.size(0)
+            if loss_adv:
+                loss_adv_total += loss_adv.item() * data.size(0)
 
             if (batch_idx + 1) % 10 == 0:
                 logger.info(f"Train Epoch {epoch} [{data_total} {data_t_total}/{num_source_train}:] loss_cls {loss_cls_total / data_total} ")
                 if epoch >= pure_cls_epoch:
                     logger.info(f"loss_adv: {loss_adv_total / data_total} loss_geo_mmd {loss_geo_total / data_total} loss_sem_mmd {loss_sem_total / data_total}")
+
+        writer.add_scalar("loss/cls", loss_cls_total / data_total, epoch)
+        writer.add_scalar("loss/adv", loss_adv_total / data_total, epoch)
+        writer.add_scalar("loss/mmd_geo", loss_geo_total / data_total, epoch)
+        writer.add_scalar("loss/mmd_sem", loss_sem_total / data_total, epoch)
 
         # Testing
         with torch.no_grad():
