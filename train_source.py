@@ -4,7 +4,6 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from model.model_pointnet import Pointnet_cls, Pointnet2_cls, DGCNN
 from data.dataloader import Modelnet40_data, Shapenet_data, Scannet_data_h5
-from data.dataloader import create_single_dataset
 
 import time
 import os
@@ -45,8 +44,27 @@ def main():
     logger.info('Start Training\nInitiliazing\n')
     logger.info(f'The source domain is set to: {args.source}')
 
-    # test_datasets = list(set(dataset_list) - {args.source})
-    # logger.info(f'The datasets used for testing: {test_datasets}')
+    test_datasets = list(set(dataset_list) - {args.source})
+    logger.info(f'The datasets used for testing: {test_datasets}')
+    # cross-dataset evaluation
+    source_test_dataset = create_single_dataset(args.source, status="test", aug=False)
+    target_test_dataset1 = create_single_dataset(test_datasets[0], status="test", aug=False)
+    target_test_dataset2 = create_single_dataset(test_datasets[-1], status="test", aug=False)
+
+    meta_source_test_dataloader = DataLoader(source_test_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
+                                        drop_last=True)
+    meta_target_test_dataloader1 = DataLoader(target_test_dataset1, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
+                                         drop_last=True)
+    meta_target_test_dataloader2 = DataLoader(target_test_dataset2, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
+                                         drop_last=True)
+    meta_performance_test_sets = {"source": meta_source_test_dataloader, "test1": meta_target_test_dataloader1,
+                             "test2": meta_target_test_dataloader2}
+
+    meta_best_test_acc = {"source": [0, 0], "test1":[0, 0], "test2":[0, 0]}
+    # best_target_acc_epoch + best_target_acc
+    meta_dataset_remapping = {"source":args.source, "test1": test_datasets[0],
+                             "test2": test_datasets[1]}
+
 
     spliter_path = os.path.join(data_root, args.source, "spliter")
     train_list = os.path.join(spliter_path, "rebu_train.txt")
@@ -165,6 +183,29 @@ def main():
                 best_test_acc[eval_dataset][0] = eval_result["best_target_acc_epoch"]
                 writer_item = 'acc/' + eval_result["dataset"] + "_test_acc"
                 writer.add_scalar(writer_item, eval_result["best_target_acc"], epoch)
+
+        if trained_epoch % 10 == 0:
+             with torch.no_grad():
+                model.eval()
+                for eval_dataset in meta_performance_test_sets.keys():
+                    eval_dict = {
+                        "model": copy.deepcopy(model),
+                        "dataloader": meta_performance_test_sets[eval_dataset],
+                        "dataset": eval_dataset,
+                        "best_target_acc": meta_best_test_acc[eval_dataset][1],
+                        "device": device,
+                        "criterion": criterion,
+                        "epoch": epoch,
+                        "best_target_acc_epoch": meta_best_test_acc[eval_dataset][0],
+                        "dataset_name": meta_dataset_remapping[eval_dataset],
+                        "num_class": cfg["DATASET"]["NUM_CLASS"],
+                        "source_flag": True
+                    }
+                    eval_result = eval_worker(eval_dict, logger)
+                    meta_best_test_acc[eval_dataset][1] = eval_result["best_target_acc"]
+                    meta_best_test_acc[eval_dataset][0] = eval_result["best_target_acc_epoch"]
+                    writer_item = 'acc/' + eval_result["dataset"] + "_test_acc"
+                    writer.add_scalar(writer_item, eval_result["best_target_acc"], epoch)
         
         time_pass_e = time.time() - since_e
         logger.info('The {} epoch takes {:.0f}m {:.0f}s'.format(epoch, time_pass_e // 60, time_pass_e % 60))
