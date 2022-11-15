@@ -242,7 +242,7 @@ class Scannet_data_h5(data.Dataset):
 
 
 class UnifiedPointDG(data.Dataset):
-    def __init__(self, dataset_type, pts, labels, status='train', pc_input_num=1024, aug=True):
+    def __init__(self, dataset_type, pts, labels, status='train', pc_input_num=1024, aug=True, model="DGCNN"):
         super(UnifiedPointDG, self).__init__()
 
         self.num_points = pc_input_num
@@ -260,6 +260,8 @@ class UnifiedPointDG(data.Dataset):
         for i, label in enumerate(labels):
             self.indices[int(label)].append(i)
         self.cls_num_counter = [ len(cls_index) for cls_index in self.indices]
+
+        self.model = model
 
         print(f"Create {status} Dataset {dataset_type} with pts {self.dataset_size}")
         print(f"Cls number {self.cls_num_counter}")
@@ -303,7 +305,7 @@ class UnifiedPointDG(data.Dataset):
         # TODO should do normal once, to speed-up the whole process
         pts = normal_pc(raw_pts)
 
-        if self.dataset_type != "modelnet" :
+        if self.dataset_type != "modelnet" and self.model == "DGCNN":
             rotate_angle = - np.pi / 2
             pts = rotate_shape(pts, "x", rotate_angle)
 
@@ -328,7 +330,8 @@ class UnifiedPointDG(data.Dataset):
         return self.pts.shape[0]
 
 
-def create_splitted_dataset(dataset_type, status="train", config=None, logger=None, pc_num=1024):
+
+def create_splitted_dataset(dataset_type, status="train", config=None, logger=None, pc_num=1024, aug=True, model="Pointnet"):
     dataset_list = ["scannet", "shapenet", "modelnet"]
     assert dataset_type in dataset_list, f"Not supported dataset {dataset_type}!"
 
@@ -340,18 +343,17 @@ def create_splitted_dataset(dataset_type, status="train", config=None, logger=No
         pts = dataset_spliter[subset]["pts"]
         label = dataset_spliter[subset]["label"]
         dataset_subsets.append(UnifiedPointDG(
-            dataset_type=dataset_type, pts=pts, labels=label, status=status, pc_input_num=pc_num))
-
+            dataset_type=dataset_type, pts=pts, labels=label, status=status, pc_input_num=pc_num, model=model, aug=aug))
     return dataset_subsets
 
 
-def create_single_dataset(dataset_type, status="train", aug=False, pc_num=1024):
+def create_single_dataset(dataset_type, status="train", aug=False, pc_num=1024, model="Pointnet"):
     dataset_list = ["scannet", "shapenet", "modelnet"]
     assert dataset_type in dataset_list, f"Not supported dataset {dataset_type}!"
 
     pts, labels = include_dataset_full_information(dataset_type, status)
     assert len(set(labels.tolist())) == 10, "The class in labels is less than 10!"
-    return UnifiedPointDG(dataset_type=dataset_type, pts=pts, labels=labels, status=status, aug=aug, pc_input_num=pc_num)
+    return UnifiedPointDG(dataset_type=dataset_type, pts=pts, labels=labels, status=status, aug=aug, pc_input_num=pc_num, model=model)
 
 
 if __name__ == "__main__":

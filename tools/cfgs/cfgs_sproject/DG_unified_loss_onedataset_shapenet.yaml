@@ -1,7 +1,12 @@
 EXPERIMENT: DG_exp
 EXTRA_TAG: DG_Loss_ShapeNet
-DATA_ROOT: /mnt/lustre/huangsiyuan/data/PointDA_data
-LOGS_ROOT: /mnt/lustre/huangsiyuan/data/logs
+DATA_ROOT: /mnt/petrelfs/huangsiyuan/data/PointDA_data
+LOGS_ROOT: /mnt/petrelfs/huangsiyuan/data/PointDA_data/logs
+
+
+DATA_ROOT: /mnt/petrelfs/huangsiyuan/data/PointDA_data
+LOGS_ROOT: /mnt/petrelfs/huangsiyuan/data/PointDA_data/logs
+
 
 DATASET:
     NUM_CLASS: 10
@@ -9,9 +14,13 @@ DATASET:
 
 MODEL: MDA
 # alignment model
+Model: DGCNN
+# Pointnet vs  Pointnet2
+Model: DGCNN
+# Pointnet vs  Pointnet2
 
 METHODS:
-    MMD_WEIGHT: 1.0
+    MMD_WEIGHT: 0.5
     # the weight of total MMD loss
     CLS_WEIGHT: 1.0
     # the weight of total classification loss
@@ -49,6 +58,7 @@ DATASET_SPLITTER:
     SAMPLE_RATE: 0.5
     TRAIN_BASE: 1
     RELOAD: True
+    EXTRA_TAG: Datetime
 
 
 OPTIMIZATION:

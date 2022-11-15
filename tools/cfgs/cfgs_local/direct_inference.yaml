@@ -3,6 +3,9 @@ EXTRA_TAG: Source_Baseline/test3
 DATA_ROOT: /hdd1/huangsiyuan/PointDA_data
 LOGS_ROOT: /hdd1/huangsiyuan/PointDA_data
 
+# Model: Pointnet2
+Model: DGCNN
+
 DATASET:
     NUM_CLASS: 10
 

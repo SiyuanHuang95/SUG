@@ -16,7 +16,7 @@ class _PointnetSAModuleBase(nn.Module):
         self.mlps = None
         self.pool_method = 'max_pool'
 
-    def forward(self, xyz: torch.Tensor, features: torch.Tensor = None, new_xyz=None) -> (torch.Tensor, torch.Tensor):
+    def forward(self, xyz: torch.Tensor, features: torch.Tensor = None, new_xyz=None):
         """
         :param xyz: (B, N, 3) tensor of the xyz coordinates of the features
         :param features: (B, N, C) tensor of the descriptors of the the features

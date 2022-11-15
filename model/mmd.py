@@ -15,6 +15,10 @@ from utils.common_utils import create_one_hot_labels, get_most_overlapped_elemen
 from chamfer_distance import ChamferDistance
 from dataset_splitter import kl_divergence_distance, cal_probs2entropy
 
+import torch
+import torch.nn as nn
+# use the CosineEmbeddingLoss as ConstrativeLoss implementations
+
 min_var_est = 1e-8
 sigma_list = [0.01, 0.1, 1, 10, 100]
 
@@ -24,6 +28,7 @@ def mmd_cal(label_s, feat_s, label_t, feat_t, args:dict, data_s=None, data_t=Non
     sample_weights_flag = args.get("GEO_WEIGHTS", None) or args.get("SEM_WEIGHTS", None)
     if data_s is not None and sample_weights_flag:
         sample_weights = cal_sample_weights(data_s, data_t, args, label_s=label_s, label_t=label_t, KPC=KPC)
+        sample_weights = cal_sample_weights(data_s, data_t, args, label_s=label_s, label_t=label_t)
     if args["NAME"] == "SOFT_MMD":
         return soft_mmd(label_s, feat_s, label_t, feat_t, float(args["LABEL_SCALE"]), sample_weights=sample_weights)
     elif args["NAME"] == "HARD_MMD":
@@ -71,6 +76,22 @@ def hard_mmd(label_s, feat_s, label_t, feat_t):
 
     return mix_rbf_mmd2(selected_feat_node_s, selected_feat_node_t, sigma_list)
 
+
+def contrastive_loss_weighted(label_s, feat_s, label_t, feat_t, label_weight, CL_criterion, sample_weights=None):
+    label_s_one_hot = create_one_hot_labels(label_s).to(device='cuda')
+    label_t_one_hot = create_one_hot_labels(label_t).to(device='cuda')
+    feat_s_label = torch.cat((feat_s, label_s_one_hot * label_weight), dim=1)
+    feat_t_label = torch.cat((feat_t, label_t_one_hot * label_weight), dim=1)
+
+    same_class_index = torch.eq(label_s, label_t)
+    same_class_index = 2 * same_class_index - 1
+    loss = CL_criterion(feat_s, feat_t, same_class_index)
+    if sample_weights is not None:
+        sample_weights = sample_weights.squeeze().to(device='cuda')
+        loss = torch.mul(sample_weights, loss)
+    loss = torch.mean(loss)
+
+    return loss
 
 def max_hard_mmd(label_s, feat_s, label_t, feat_t):
     """
