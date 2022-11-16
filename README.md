@@ -88,4 +88,4 @@ python train_dg_single_gpu.py --source modelnet --cfg tools/cfgs/DG_unifider_los
 ```
 
 ## Acknowledgement
-Some of the code in this repoistory was taken (and modified according to needs) from the follwing sources: [PointNet](https://github.com/charlesq34/pointnet), [PointNet++](https://github.com/charlesq34/pointnet2), [DGCNN](https://github.com/canqin001/PointDAN), [PointDAN](https://github.com/canqin001/PointDAN), [Point Transformer](https://github.com/qq456cvb/Point-Transformers), [KPConv](https://github.com/HuguesTHOMAS/KPConv-PyTorch) and [PointDAN](https://github.com/canqin001/PointDAN).
+Some of the code in this repoistory was taken (and modified according to needs) from the follwing sources: [PointNet](https://github.com/charlesq34/pointnet), [PointNet++](https://github.com/charlesq34/pointnet2), [DGCNN](https://github.com/canqin001/PointDAN), [PointDAN](https://github.com/canqin001/PointDAN), [Point Transformer](https://github.com/qq456cvb/Point-Transformers), [KPConv](https://github.com/HuguesTHOMAS/KPConv-PyTorch).
