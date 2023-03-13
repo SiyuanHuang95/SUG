@@ -87,7 +87,7 @@ python train_dg_single_gpu.py --source modelnet --cfg tools/cfgs/DG_unifider_los
 ```
 
 ## Related Project
-- Welcome to see [3DTrans](https://github.com/PJLab-ADG/3DTrans) for developing **Autonomous Driving-oriented Transfer Learning Techniques**. By means of [3DTrans](https://github.com/PJLab-ADG/3DTrans), you can not only strengthen the zero-shot recognition ability of perception models, but also improve the model transferability and generality, from Unsupervised Domain Adaptation (UDA), Active Domain Adaptation (ADA), Semi-Supervised Domain Adaptation, and Multi-dateset Domain Fusion (MDF).
+- Welcome to see [3DTrans](https://github.com/PJLab-ADG/3DTrans) for developing **Autonomous Driving-oriented Transfer Learning Techniques**. By means of [3DTrans](https://github.com/PJLab-ADG/3DTrans), you can not only strengthen the zero-shot recognition ability of perception models, but also improve the model transferability and generality, from Unsupervised Domain Adaptation (UDA), Active Domain Adaptation (ADA), Semi-Supervised Domain Adaptation, and Multi-dateset Domain Fusion (MDF) task settings.
 
 
 
@@ -99,7 +99,7 @@ If you find this project useful in your research, please consider citing:
 ```
 @article{,
   title={SUG: Single-dataset Unified Generalization for 3D Point Cloud Classification},
-  author={Siyuan Huang, Botian Shi, Peng Gao, Tao Chen, Hongsheng Li, Yikang LI, and Bo Zhang},
+  author={Siyuan Huang, Botian Shi, Peng Gao, Hongsheng Li, Yikang LI, and Bo Zhang},
   journal={},
   year={},
 }
