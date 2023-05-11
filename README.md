@@ -93,14 +93,3 @@ python train_dg_single_gpu.py --source modelnet --cfg tools/cfgs/DG_unifider_los
 
 ## Acknowledgement
 Some of the code in this repoistory was taken (and modified according to needs) from the follwing sources: [PointNet](https://github.com/charlesq34/pointnet), [PointNet++](https://github.com/charlesq34/pointnet2), [DGCNN](https://github.com/canqin001/PointDAN), [PointDAN](https://github.com/canqin001/PointDAN), [Point Transformer](https://github.com/qq456cvb/Point-Transformers), [KPConv](https://github.com/HuguesTHOMAS/KPConv-PyTorch).
-
-## Citation
-If you find this project useful in your research, please consider citing:
-```
-@article{,
-  title={SUG: Single-dataset Unified Generalization for 3D Point Cloud Classification},
-  author={Siyuan Huang, Botian Shi, Peng Gao, Hongsheng Li, Yikang LI, and Bo Zhang},
-  journal={},
-  year={},
-}
-```
