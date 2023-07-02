@@ -36,3 +36,5 @@ tools/update_reminder.txt
 **/KPConv_dispositions/**
 
 **sproject**
+dataset/
+*.h5

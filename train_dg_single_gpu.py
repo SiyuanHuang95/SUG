@@ -24,7 +24,7 @@ from utils.common_utils import create_logger, exp_log_folder_creator, set_random
 from utils.config import parser_config, log_config_to_file
 from data.dataloader import create_splitted_dataset, create_single_dataset
 
-from model.KPConv_model import KPFCls, p2p_fitting_regularizer
+# from model.KPConv_model import KPFCls, p2p_fitting_regularizer
 
 
 from tensorboardX import SummaryWriter
@@ -58,8 +58,12 @@ def main():
     logger.info('Start Training\nInitiliazing\n')
     logger.info(f'The source domain is set to: {args.source}')
 
-    dataset_list = ["scannet", "shapenet", "modelnet"]
-    test_datasets = list(set(dataset_list) - {args.source})
+    dataset_list = {
+        "modelnet_11": ["modelnet_11", "scanobjectnn_11", "scanobjectnn_11"],
+        "shapenet_9": ["shapenet_9", "scanobjectnn_9", "scanobjectnn_9"]
+    }
+    # ["modelnet_11", "scanobjectnn_11", "scanobjectnn_9", "shapenet_9"]
+    test_datasets = list(set(dataset_list[args.source]) - {args.source}) * 2
     logger.info(f'The datasets used for testing: {test_datasets}')
 
     set_random_seed(666 + cfg.LOCAL_RANK)
@@ -68,27 +72,19 @@ def main():
     multi_spliter = False
     # when split_config is a dict which means only one split method is used
     split_config = cfg["DATASET_SPLITTER"]
+    num_class = cfg["DATASET"]["NUM_CLASS"]
+    logger.info(f"Num of classes: {num_class}")
     if type(split_config) is EasyDict:
-        source_train_subsets = create_splitted_dataset(dataset_type=args.source, status="train", logger=logger, config=split_config)
+        source_train_subsets = create_splitted_dataset(dataset_type=args.source, status="train", logger=logger, config=split_config, pc_num=2048, num_class=num_class)
         source_train_dataset = source_train_subsets[split_config["TRAIN_BASE"]]
         target_train_dataset1 = source_train_subsets[1-split_config["TRAIN_BASE"]]
-    elif type(split_config) is list:
-        logger.info(f"{len(split_config)} types split methods are used.")
-        multi_spliter = True
-        source_train_datasets = []
-        target_train_datasets = []
-
-        for config_ in split_config:
-            source_train_subsets = create_splitted_dataset(dataset_type=args.source, status="train", logger=logger, config=config_, model=cfg.get("Model", "Pointnet"))
-            source_train_datasets.append(source_train_subsets[config_["TRAIN_BASE"]])
-            target_train_datasets.append(source_train_subsets[1-config_["TRAIN_BASE"]])
     else:
         raise RuntimeError(f"Unsupported Splitter Config {type(split_config)}")
     # split 2 is fullsize
 
-    source_test_dataset = create_single_dataset(args.source, status="test", aug=False, model=cfg.get("Model", "Pointnet"))
-    target_test_dataset1 = create_single_dataset(test_datasets[0], status="test", aug=False, model=cfg.get("Model", "Pointnet"))
-    target_test_dataset2 = create_single_dataset(test_datasets[-1], status="test", aug=False, model=cfg.get("Model", "Pointnet"))
+    source_test_dataset = create_single_dataset(args.source, status="test", aug=False, model=cfg.get("Model", "Pointnet"), pc_num=2048, num_class=num_class)
+    target_test_dataset1 = create_single_dataset(test_datasets[0], status="test", aug=False, model=cfg.get("Model", "Pointnet"), pc_num=2048, num_class=num_class)
+    target_test_dataset2 = create_single_dataset(test_datasets[-1], status="test", aug=False, model=cfg.get("Model", "Pointnet"), pc_num=2048, num_class=num_class)
 
     if not multi_spliter:
         num_source_train = len(source_train_dataset)
@@ -105,27 +101,6 @@ def main():
                                                 drop_last=True)
             target_train_dataloader = DataLoader(target_train_dataset1, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
                                                 drop_last=True)
-    else:
-        source_train_dataloaders = []
-        target_train_dataloaders = []
-        for st,tt in zip(source_train_datasets, target_train_datasets):
-            num_source_train = len(st)
-            num_target_train1 = len(tt)
-            logger.info(f"For Current Split Method: Num of source train: {num_source_train}, Num of target train: {num_target_train1}")
-
-            if cfg.get("CLASS_BALANCE", False):
-                sampler_1 = Sampler(st.classes(), class_per_batch=10, batch_size=BATCH_SIZE)
-                sampler_2 = Sampler(tt.classes(), class_per_batch=10, batch_size=BATCH_SIZE)
-                source_train_dataloader = DataLoader(st, batch_sampler=sampler_1, num_workers=2)
-                target_train_dataloader = DataLoader(tt, batch_sampler=sampler_2, num_workers=2)
-            else:
-                source_train_dataloader = DataLoader(st, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
-                                                    drop_last=True)
-                target_train_dataloader = DataLoader(tt, batch_size=BATCH_SIZE, shuffle=True, num_workers=2,
-                                                    drop_last=True)
-
-            source_train_dataloaders.append(source_train_dataloader)
-            target_train_dataloaders.append(target_train_dataloader)
 
     num_source_test = len(source_test_dataset)
     num_target_test1 = len(target_test_dataset1)
@@ -149,11 +124,9 @@ def main():
     # best_target_acc_epoch + best_target_acc
     dataset_remapping = {"source":args.source, "test1": test_datasets[0],
                              "test2": test_datasets[1]}
-    # pool_eval = Pool(processes=len(dataset_list))
-    # AssertionError: daemonic processes are not allowed to have children
 
     # Model
-    model = mM.Net_MDA(model_name=cfg.get("Model", "Pointnet"))
+    model = mM.Net_MDA(model_name=cfg.get("Model", "Pointnet"), num_class=num_class)
     logger.info(model)
     model = model.to(device=device)
     KPC_Flag = cfg["Model"] == "KPConv"
@@ -311,13 +284,13 @@ def main():
 
                 # Add geometric weights
                 geo_mmd_cfg = cfg["METHODS"]["GEO_MMD"][0]
-                loss_geo_mmd =  cfg["METHODS"]["MMD_WEIGHT"] * geo_mmd_cfg["GEO_SCALE"] * mmd.mmd_cal(label, feat_node_s, label_t, feat_node_t, geo_mmd_cfg, data_s=data, data_t=data_t, KPC=KPC_Flag)           
+                loss_geo_mmd =  cfg["METHODS"]["MMD_WEIGHT"] * geo_mmd_cfg["GEO_SCALE"] * mmd.mmd_cal(label, feat_node_s, label_t, feat_node_t, geo_mmd_cfg, data_s=data, data_t=data_t, KPC=KPC_Flag, num_class=num_class)           
                 
                 sem_mmd_cfg = cfg["METHODS"]["SEM_MMD"][0]
                 loss_sem_mmd = None
                 if  sem_mmd_cfg["SEM_SCALE"] > 0:
-                    loss_sem_mmd_1 = sem_mmd_cfg["SEM_SCALE"] * mmd.mmd_cal(label, sem_fea_s1, label_t, sem_fea_t1, sem_mmd_cfg, data_s=pred_s1, data_t=pred_t1, KPC=KPC_Flag)
-                    loss_sem_mmd_2 = sem_mmd_cfg["SEM_SCALE"] * mmd.mmd_cal(label, sem_fea_s2, label_t, sem_fea_t2, sem_mmd_cfg, data_s=pred_s2, data_t=pred_t2, KPC=KPC_Flag)
+                    loss_sem_mmd_1 = sem_mmd_cfg["SEM_SCALE"] * mmd.mmd_cal(label, sem_fea_s1, label_t, sem_fea_t1, sem_mmd_cfg, data_s=pred_s1, data_t=pred_t1, KPC=KPC_Flag, num_class=num_class)
+                    loss_sem_mmd_2 = sem_mmd_cfg["SEM_SCALE"] * mmd.mmd_cal(label, sem_fea_s2, label_t, sem_fea_t2, sem_mmd_cfg, data_s=pred_s2, data_t=pred_t2, KPC=KPC_Flag, num_class=num_class)
 
                     loss_sem_mmd = cfg["METHODS"]["MMD_WEIGHT"] * (0.5 * loss_sem_mmd_1 + 0.5 * loss_sem_mmd_2)
 

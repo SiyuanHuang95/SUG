@@ -12,9 +12,9 @@ import datetime
 
 
 # data_root = "/home/siyuan/4-data/PointDA_data"
-data_root = "/hdd1/huangsiyuan/PointDA_data"
+data_root = "/mnt/petrelfs/huangsiyuan/SUG/dataset"
 num_class = 10
-dataset_list = ["scannet", "shapenet", "modelnet"]
+dataset_list = ["modelnet_11", "scanobjectnn_11", "scanobjectnn_9", "shapenet_9"]
 
 
 def split_dataset(dataset_type, split_config, logger, status='train'):
@@ -128,6 +128,7 @@ def split_dataset(dataset_type, split_config, logger, status='train'):
 
 def include_sud_dataset_per_class(dataset_type, status='train', sub_ration=4):
     sampled_pts, sampled_labels = [], []
+    num_class = int(str(dataset_type).split("_")[-1])
     for i in range(num_class):
         cls_pts, cls_labels = include_dataset_one_class(dataset_type=dataset_type, cls=i, status=status)
         cls_size = len(cls_pts)
@@ -164,6 +165,7 @@ def include_dataset_one_class(dataset_type, status='train', cls=0):
 
 def include_dataset_from_splitter(dataset_type, spliter_config, subset_num=2, method="kmeans", ablation=False):
     # NOTE: the spliter folder is hard-code here, need to fix
+    num_class = int(str(dataset_type).split("_")[-1])
     spliter_path = os.path.join(data_root, dataset_type, "DGCNN_spliter")
     if not os.path.exists(spliter_path):
         raise RuntimeError("No Spliter Folder Found, Need to Generate Dataset Cluster First!")
@@ -377,7 +379,6 @@ def extract_shapenet_to_npy(shapenet_path, dataset="shapenet"):
 
 def extract_modelnet_to_npy(modelnet_path):
     extract_shapenet_to_npy(modelnet_path, dataset="modelnet")
-
 
 def rename_npy_files(data_path):
     """

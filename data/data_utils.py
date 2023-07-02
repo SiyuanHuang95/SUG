@@ -14,6 +14,13 @@ def normal_pc(pc):
     pc = pc / pc_L_max
     return pc
 
+
+def scale_pc(pc, scale_lo=0.8, scale_hi=1.25):
+    scaler = np.random.uniform(scale_lo, scale_hi)
+    pc[:, 0:3] *= scaler
+    return pc
+    
+
 def rotate_shape(x, axis, angle):
     """
     Input:
@@ -280,3 +287,54 @@ def farthest_point_sample(xyz, npoint):
         distance[mask] = dist[mask]  # save the minimal distance of each point from all points that were chosen until now
         farthest = torch.max(distance, -1)[1]  # get the index of the point farthest away
     return centroids, centroids_vals
+
+def ms_density(pc, v_point=np.array([1, 0, 0]), gate=1):
+    dist = np.sqrt((v_point ** 2).sum())
+    max_dist = dist + 1
+    min_dist = dist - 1
+    dist = np.linalg.norm(pc - v_point.reshape(1,3), axis=1)
+    dist = (dist - min_dist) / (max_dist - min_dist)
+    r_list = np.random.uniform(0, 1, pc.shape[0])
+    tmp_pc = pc[dist * gate < (r_list)]
+    return tmp_pc
+
+def ms_p_scan(pc, pixel_size=0.017):
+    pixel = int(2 / pixel_size)
+    rotated_pc = ms_rotate_point_cloud_3d(pc)
+    pc_compress = (rotated_pc[:,2] + 1) / 2 * pixel * pixel + (rotated_pc[:,1] + 1) / 2 * pixel
+    points_list = [None for i in range((pixel + 5) * (pixel + 5))]
+    pc_compress = pc_compress.astype(np.int)
+    for index, point in enumerate(rotated_pc):
+        compress_index = pc_compress[index]
+        if compress_index > len(points_list):
+            print('out of index:', compress_index, len(points_list), point, pc[index], (pc[index] ** 2).sum(), (point ** 2).sum())
+        if points_list[compress_index] is None:
+            points_list[compress_index] = index
+        elif point[0] > rotated_pc[points_list[compress_index]][0]:
+            points_list[compress_index] = index
+    points_list = list(filter(lambda x:x is not None, points_list))
+    points_list = pc[points_list]
+    return points_list
+
+def ms_drop_hole(pc, p):
+    random_point = np.random.randint(0, pc.shape[0])
+    index = np.linalg.norm(pc - pc[random_point].reshape(1,3), axis=1).argsort()
+    return pc[index[int(pc.shape[0] * p):]]
+
+def ms_rotate_point_cloud_3d(pc):
+    rotation_angle = np.random.rand(3) * 2 * np.pi
+    cosval = np.cos(rotation_angle)
+    sinval = np.sin(rotation_angle)
+    rotation_matrix_1 = np.array([[cosval[0], 0, sinval[0]],
+                                [0, 1, 0],
+                                [-sinval[0], 0, cosval[0]]])
+    rotation_matrix_2 = np.array([[1, 0, 0],
+                                [0, cosval[1], -sinval[1]],
+                                [0, sinval[1], cosval[1]]])
+    rotation_matrix_3 = np.array([[cosval[2], -sinval[2], 0],
+                                 [sinval[2], cosval[2], 0],
+                                 [0, 0, 1]])
+    rotation_matrix = np.matmul(np.matmul(rotation_matrix_1, rotation_matrix_2), rotation_matrix_3)
+    rotated_data = np.dot(pc.reshape((-1, 3)), rotation_matrix)
+
+    return rotated_data

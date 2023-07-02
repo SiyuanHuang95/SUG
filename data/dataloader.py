@@ -242,22 +242,26 @@ class Scannet_data_h5(data.Dataset):
 
 
 class UnifiedPointDG(data.Dataset):
-    def __init__(self, dataset_type, pts, labels, status='train', pc_input_num=1024, aug=True, model="DGCNN"):
+    def __init__(self, dataset_type, pts, labels, status='train', pc_input_num=1024, aug=True, model="DGCNN", class_num=10, ms_aug=True):
         super(UnifiedPointDG, self).__init__()
 
         self.num_points = pc_input_num
         self.status = status
         self.aug = aug
+        self.ms_aug = ms_aug
         self.dataset_type = dataset_type
 
         self.pts = pts
         self.labels = labels
 
-        self.class_num = 10
+        self.class_num = class_num
+        print(f"Class number is {self.class_num}")
         self.dataset_size = pts.shape[0]
         self.indices = [[] for _ in range(self.class_num)]
          
         for i, label in enumerate(labels):
+            if label >= self.class_num:
+                print(f"Label {label} is larger than class number {self.class_num}")
             self.indices[int(label)].append(i)
         self.cls_num_counter = [ len(cls_index) for cls_index in self.indices]
 
@@ -265,6 +269,37 @@ class UnifiedPointDG(data.Dataset):
 
         print(f"Create {status} Dataset {dataset_type} with pts {self.dataset_size}")
         print(f"Cls number {self.cls_num_counter}")
+        
+        self.density_points = None
+        if self.status == "train":
+            self.fn = [
+            lambda pc: ms_drop_hole(pc, p=0.24),
+            lambda pc: ms_drop_hole(pc, p=0.36),
+            lambda pc: ms_drop_hole(pc, p=0.45),
+            lambda pc: ms_p_scan(pc, pixel_size=0.017),
+            lambda pc: ms_p_scan(pc, pixel_size=0.022),
+            lambda pc: ms_p_scan(pc, pixel_size=0.035),
+            lambda pc: ms_density(pc, self.density_points[np.random.choice(self.density_points.shape[0])], 1.3),
+            lambda pc: ms_density(pc, self.density_points[np.random.choice(self.density_points.shape[0])], 1.4),
+            lambda pc: ms_density(pc, self.density_points[np.random.choice(self.density_points.shape[0])], 1.6),
+            lambda pc: pc.copy(),
+            ]
+            self.aug_task_num = len(self.fn)
+        
+    def init_density_points(self):
+        rand_points = np.random.uniform(-1, 1, 40000)
+        x1 = rand_points[:20000]
+        x2 = rand_points[20000:]
+        power_sum = x1 ** 2 + x2 ** 2
+        p_filter = power_sum < 1
+        power_sum = power_sum[p_filter]
+        sqrt_sum = np.sqrt(1 - power_sum)
+        x1 = x1[p_filter]
+        x2 = x2[p_filter]
+        x = (2 * x1 * sqrt_sum).reshape(-1, 1)
+        y = (2 * x2 * sqrt_sum).reshape(-1, 1)
+        z = (1 - 2 * power_sum).reshape(-1, 1)
+        self.density_points = np.hstack([x, y, z])
 
     def classes(self):
         return self.indices
@@ -304,14 +339,23 @@ class UnifiedPointDG(data.Dataset):
         label = self.labels[index]
         # TODO should do normal once, to speed-up the whole process
         pts = normal_pc(raw_pts)
-
-        if self.dataset_type != "modelnet" and self.model == "DGCNN":
+        
+        if self.ms_aug:
+            task_id = np.random.choice(self.aug_task_num, 1)
+            pts = self.fn[task_id[0]](pts)
+            
+        if self.dataset_type != "modelnet_11" and self.model == "DGCNN":
             rotate_angle = - np.pi / 2
             pts = rotate_shape(pts, "x", rotate_angle)
 
         if self.aug:
+            if self.ms_aug:
+                pts = scale_pc(pts) 
+                pts = shift_point_cloud(pts)
             pts = rotation_point_cloud(pts)
             pts = jitter_point_cloud(pts)
+            
+            
 
         if pts.shape[0] < self.num_points:
             if pts.shape[0] < self.num_points / 1.5:
@@ -331,8 +375,8 @@ class UnifiedPointDG(data.Dataset):
 
 
 
-def create_splitted_dataset(dataset_type, status="train", config=None, logger=None, pc_num=1024, aug=True, model="Pointnet"):
-    dataset_list = ["scannet", "shapenet", "modelnet"]
+def create_splitted_dataset(dataset_type, status="train", config=None, logger=None, pc_num=1024, aug=True, model="Pointnet", num_class=10):
+    dataset_list = ["modelnet_11", "scanobjectnn_11", "scanobjectnn_9", "shapenet_9"]
     assert dataset_type in dataset_list, f"Not supported dataset {dataset_type}!"
 
     dataset_spliter = split_dataset(
@@ -343,17 +387,16 @@ def create_splitted_dataset(dataset_type, status="train", config=None, logger=No
         pts = dataset_spliter[subset]["pts"]
         label = dataset_spliter[subset]["label"]
         dataset_subsets.append(UnifiedPointDG(
-            dataset_type=dataset_type, pts=pts, labels=label, status=status, pc_input_num=pc_num, model=model, aug=aug))
+            dataset_type=dataset_type, pts=pts, labels=label, status=status, pc_input_num=pc_num, model=model, aug=aug, class_num=num_class))
     return dataset_subsets
 
 
-def create_single_dataset(dataset_type, status="train", aug=False, pc_num=1024, model="Pointnet"):
-    dataset_list = ["scannet", "shapenet", "modelnet"]
+def create_single_dataset(dataset_type, status="train", aug=False, pc_num=1024, model="Pointnet", num_class=10):
+    dataset_list = ["modelnet_11", "scanobjectnn_11", "scanobjectnn_9", "shapenet_9"]
     assert dataset_type in dataset_list, f"Not supported dataset {dataset_type}!"
 
     pts, labels = include_dataset_full_information(dataset_type, status)
-    assert len(set(labels.tolist())) == 10, "The class in labels is less than 10!"
-    return UnifiedPointDG(dataset_type=dataset_type, pts=pts, labels=labels, status=status, aug=aug, pc_input_num=pc_num, model=model)
+    return UnifiedPointDG(dataset_type=dataset_type, pts=pts, labels=labels, status=status, aug=aug, pc_input_num=pc_num, model=model, class_num=num_class)
 
 
 if __name__ == "__main__":

@@ -97,7 +97,8 @@ class DGCNN(nn.Module):
         x = self.conv2(x)
         x2 = x.max(dim=-1, keepdim=False)[0] # 64 * 64 * 1024
 
-        x_, node_fea, node_off = self.node_fea_adapt(x2.view(batch_size, 64, 1024, 1), x_loc)
+        # for metaset, 2048 points are used; others is 1024
+        x_, node_fea, node_off = self.node_fea_adapt(x2.view(batch_size, 64, 2048, 1), x_loc)
         x2 = self.conv1d(x_.squeeze(-1))
 
         x = get_graph_feature(x2, k=self.k)
@@ -450,7 +451,7 @@ class Pointnet_c(nn.Module):
 
 
 class Net_MDA(nn.Module):
-    def __init__(self, model_name='Pointnet'):
+    def __init__(self, model_name='Pointnet', num_class=10):
         super(Net_MDA, self).__init__()
         self.dgcnn_flag = False
         self.PTran_flag = False
@@ -475,8 +476,8 @@ class Net_MDA(nn.Module):
         self.attention_t = CALayer(64 * 64)
 
         if model_name != "KPConv":
-            self.c1 = Pointnet_c(dgcnn_flag=self.dgcnn_flag, PTran_flag=self.PTran_flag)
-            self.c2 = Pointnet_c(dgcnn_flag=self.dgcnn_flag, PTran_flag=self.PTran_flag)
+            self.c1 = Pointnet_c(dgcnn_flag=self.dgcnn_flag, PTran_flag=self.PTran_flag, num_class=num_class)
+            self.c2 = Pointnet_c(dgcnn_flag=self.dgcnn_flag, PTran_flag=self.PTran_flag, num_class=num_class)
 
         else:
             self.c1 = KPConv_c()

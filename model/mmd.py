@@ -22,44 +22,44 @@ import torch.nn as nn
 min_var_est = 1e-8
 sigma_list = [0.01, 0.1, 1, 10, 100]
 
-def mmd_cal(label_s, feat_s, label_t, feat_t, args:dict, data_s=None, data_t=None, KPC=False):
+def mmd_cal(label_s, feat_s, label_t, feat_t, args:dict, data_s=None, data_t=None, KPC=False, num_class=10):
     # Currently, lets use SOFT_MMD 
     sample_weights = None
     sample_weights_flag = args.get("GEO_WEIGHTS", None) or args.get("SEM_WEIGHTS", None)
     if data_s is not None and sample_weights_flag:
-        sample_weights = cal_sample_weights(data_s, data_t, args, label_s=label_s, label_t=label_t, KPC=KPC)
-        sample_weights = cal_sample_weights(data_s, data_t, args, label_s=label_s, label_t=label_t)
+        sample_weights = cal_sample_weights(data_s, data_t, args, label_s=label_s, label_t=label_t, KPC=KPC, num_class=num_class)
+        sample_weights = cal_sample_weights(data_s, data_t, args, label_s=label_s, label_t=label_t, num_class=num_class)
     if args["NAME"] == "SOFT_MMD":
-        return soft_mmd(label_s, feat_s, label_t, feat_t, float(args["LABEL_SCALE"]), sample_weights=sample_weights)
+        return soft_mmd(label_s, feat_s, label_t, feat_t, float(args["LABEL_SCALE"]), sample_weights=sample_weights, num_class=num_class)
     elif args["NAME"] == "HARD_MMD":
         return hard_mmd(label_s, feat_s, label_t, feat_t)
     elif args["NAME"]  == "MAX_HARD_MMD":
-        return max_hard_mmd(label_s, feat_s, label_t, feat_t)
+        return max_hard_mmd(label_s, feat_s, label_t, feat_t, num_class=num_class)
     elif args["NAME"] == "OFF":
         return mix_rbf_mmd2(feat_s, feat_t, sigma_list)
     else:
         raise RuntimeError("Not Supported MMD Method")
 
 
-def cal_sample_weights(data_s, data_t, args, label_s=None, label_t=None, KPC=False):
+def cal_sample_weights(data_s, data_t, args, label_s=None, label_t=None, KPC=False, num_class=10):
     if args.get("GEO_WEIGHTS", None):
         sample_weights = geometric_weights(data_s, data_t, weighting=args["GEO_WEIGHTS"],KPC=KPC)
     elif args.get("ENTROPY_WEIGHTS", None):
         sample_weights = entropy_weights(data_s, data_t, weighting=args["ENTROPY_WEIGHTS"])
     elif args.get("SEM_WEIGHTS", None):
-        sample_weights = prob_weights_soft(data_s, data_t, label_s, label_t, args["LABEL_WEIGHT"], args["SEM_WEIGHTS"])
+        sample_weights = prob_weights_soft(data_s, data_t, label_s, label_t, args["LABEL_WEIGHT"], args["SEM_WEIGHTS"], num_class=num_class)
     else:
         raise RuntimeError("Not suppprted weighting opperation")
     return sample_weights
 
 
-def soft_mmd(label_s, feat_s, label_t, feat_t, label_weight, sample_weights=None):
+def soft_mmd(label_s, feat_s, label_t, feat_t, label_weight, sample_weights=None, num_class=10):
     """
         First covert the scalar label to one-hot vector
         Concat the label vector (batch * 10) to the feat vector (batch * n) 4096 for geo-level and  256 for sem-level
     """
-    label_s_one_hot = create_one_hot_labels(label_s).to(device='cuda')
-    label_t_one_hot = create_one_hot_labels(label_t).to(device='cuda')
+    label_s_one_hot = create_one_hot_labels(label_s, num_class=num_class).to(device='cuda')
+    label_t_one_hot = create_one_hot_labels(label_t, num_class=num_class).to(device='cuda')
     feat_s_label = torch.cat((feat_s, label_s_one_hot * label_weight), dim=1)
     feat_t_label = torch.cat((feat_t, label_t_one_hot * label_weight), dim=1)
 
@@ -77,9 +77,9 @@ def hard_mmd(label_s, feat_s, label_t, feat_t):
     return mix_rbf_mmd2(selected_feat_node_s, selected_feat_node_t, sigma_list)
 
 
-def contrastive_loss_weighted(label_s, feat_s, label_t, feat_t, label_weight, CL_criterion, sample_weights=None):
-    label_s_one_hot = create_one_hot_labels(label_s).to(device='cuda')
-    label_t_one_hot = create_one_hot_labels(label_t).to(device='cuda')
+def contrastive_loss_weighted(label_s, feat_s, label_t, feat_t, label_weight, CL_criterion, sample_weights=None, num_class=10):
+    label_s_one_hot = create_one_hot_labels(label_s, num_class=num_class).to(device='cuda')
+    label_t_one_hot = create_one_hot_labels(label_t, num_class=num_class).to(device='cuda')
     feat_s_label = torch.cat((feat_s, label_s_one_hot * label_weight), dim=1)
     feat_t_label = torch.cat((feat_t, label_t_one_hot * label_weight), dim=1)
 
@@ -93,11 +93,11 @@ def contrastive_loss_weighted(label_s, feat_s, label_t, feat_t, label_weight, CL
 
     return loss
 
-def max_hard_mmd(label_s, feat_s, label_t, feat_t):
+def max_hard_mmd(label_s, feat_s, label_t, feat_t, num_class=10):
     """
         Try to have max class alignment and reorder the feature vector
     """
-    ind_s, ind_t = get_most_overlapped_element(label_s.cpu(), label_t.cpu())
+    ind_s, ind_t = get_most_overlapped_element(label_s.cpu(), label_t.cpu(), num_class=num_class)
     assert len(ind_s) == len(ind_t), "The feature shape mis-matched"
     selected_feat_node_s = feat_s[ind_s]
     selected_feat_node_t = feat_t[ind_t]
@@ -131,17 +131,17 @@ def geometric_weights(pc_s, pc_t, metric="chamfer_distance", weighting="none", K
     return weights.reshape(1, -1)
 
 
-def prob_weights_soft(pred_s, pred_t, label_s, label_t, label_weight, weighting="mean2one"):
+def prob_weights_soft(pred_s, pred_t, label_s, label_t, label_weight, weighting="mean2one", num_class=10):
     assert label_weight < 1, "For Entropy, Label weight should be less than one"
 
     # need to convert logits to prob with softmax firstly, in order to use KL
     pred_s_ = torch.softmax(pred_s.detach().cpu(), dim=1)
-    label_s_one_hot = create_one_hot_labels(label_s)
-    pred_s_label = torch.cat((pred_s_.view(-1, 10), label_s_one_hot * label_weight), dim=1)
+    label_s_one_hot = create_one_hot_labels(label_s, num_class=num_class)
+    pred_s_label = torch.cat((pred_s_.view(-1, num_class), label_s_one_hot * label_weight), dim=1)
 
     pred_t_ = torch.softmax(pred_t.detach().cpu(), dim=1)
-    label_t_one_hot = create_one_hot_labels(label_t)
-    pred_t_label = torch.cat((pred_t_.view(-1, 10), label_t_one_hot * label_weight), dim=1)
+    label_t_one_hot = create_one_hot_labels(label_t, num_class=num_class)
+    pred_t_label = torch.cat((pred_t_.view(-1, num_class), label_t_one_hot * label_weight), dim=1)
 
     distance = kl_divergence_distance(normalized(pred_s_label), normalized(pred_t_label)).sum(1)
     weights = distance2weights(distances=distance, method=weighting)

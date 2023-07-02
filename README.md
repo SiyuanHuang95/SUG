@@ -62,7 +62,9 @@ pip install git+'https://github.com/otaheri/chamfer_distance'
 ```
 
 ## Data Download
-Download the [PointDA-10](https://drive.google.com/file/d/1-LfJWL5geF9h0Z2QpdTL0n4lShy8wy2J/view?usp=sharing) and extract it as the dataset fold. 
+Download the [PointDA-10](https://drive.google.com/file/d/1-LfJWL5geF9h0Z2QpdTL0n4lShy8wy2J/view?usp=sharing) and extract it as the dataset fold. ß
+
+For an easy development and implementation, we first extract the point clouds and labels from the original dataset, and save them as the numpy format. The used script can be found in *utils/train_files_spliter.py*.
 
 ## Train & Test
 If you run the experiment on one generalization scanerio, like modelnet to others:

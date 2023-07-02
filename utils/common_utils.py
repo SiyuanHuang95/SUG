@@ -148,13 +148,13 @@ def exp_log_folder_creator(cfg, extra_tag=None):
         os.makedirs(output_dir)
     else:
         output_dir = os.path.join(output_dir, today_str)
-        os.makedirs(output_dir)
+        os.makedirs(output_dir, exist_ok=True)
 
     if not os.path.exists(ckpt_dir): 
         os.makedirs(ckpt_dir)
     else:
         ckpt_dir = os.path.join(ckpt_dir, today_str)
-        os.makedirs(ckpt_dir)
+        os.makedirs(ckpt_dir, exist_ok=True)
     return output_dir, ckpt_dir
 
 
